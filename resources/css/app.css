@@ -1,0 +1,46 @@
+@import 'tailwindcss';
+@import 'vuetify/styles';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+
+@theme {
+    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+        'Segoe UI Symbol', 'Noto Color Emoji';
+}
+
+@import '@mdi/font/css/materialdesignicons.css';
+:root { font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #173b37; background: #f7faf9; }
+body { margin: 0; min-width: 320px; }
+.pet-page { background: #f7faf9; min-height: 100vh; }
+.v-theme--larEPatasDark.pet-page { background: #0e1514; }
+.v-theme--larEPatasDark .filter-panel, .v-theme--larEPatasDark .pet-card { border-color: #29413c !important; }
+.v-theme--larEPatasDark .v-main { background: radial-gradient(circle at 78% 8%, rgb(28 99 88 / .18), transparent 28%), #0e1514; }
+.v-theme--larEPatasDark .app-header { background: #101c1a !important; border-bottom-color: #243b36; color: #eaf7f4; }
+.v-theme--larEPatasDark .v-navigation-drawer { background: #101c1a !important; border-right-color: #243b36; }
+.v-theme--larEPatasDark .v-footer, .v-theme--larEPatasDark .bg-white { background: #101c1a !important; border-color: #243b36 !important; color: #c6d8d4 !important; }
+.v-theme--larEPatasDark .v-card, .v-theme--larEPatasDark .v-expansion-panel, .v-theme--larEPatasDark .v-table { background: #17211f !important; color: #edf7f4; }
+.v-theme--larEPatasDark .v-field { background: #1b2b28; }.v-theme--larEPatasDark .v-field--focused { background: #263a42; }
+.v-theme--larEPatasDark .v-expansion-panel-title, .v-theme--larEPatasDark .v-list-item { color: #e7f5f1; }
+.v-theme--larEPatasDark .v-divider { border-color: #29413c; }.v-theme--larEPatasDark .text-medium-emphasis, .v-theme--larEPatasDark .pet-meta { color: #aabfba !important; }
+.v-theme--larEPatasDark .auth-page { background: radial-gradient(circle at 20% 10%, rgb(41 126 111 / .23), transparent 26%), #0a1110; }
+.v-theme--larEPatasDark .auth-card { background: #17211f !important; box-shadow: 0 24px 70px rgb(0 0 0 / .48) !important; }
+.v-theme--larEPatasDark .hero-gradient { background: linear-gradient(105deg, #09201e, #0b4f48 57%, #106d61); }
+.app-header { border-bottom: 1px solid #e5eeeb; }
+.brand-mark { align-items: center; background: #d9f4ec; border-radius: 12px; color: #0f766e; display: inline-flex; height: 38px; justify-content: center; width: 38px; }
+.hero-gradient { background: linear-gradient(105deg, #093f3c 0%, #0f766e 55%, #17a38d 100%); overflow: hidden; position: relative; }
+.hero-gradient::after { background: url('https://images.unsplash.com/photo-1558788353-f76d92427f16?auto=format&fit=crop&w=900&q=85') center/cover; content: ''; inset: 0 0 0 auto; opacity: .35; position: absolute; width: 43%; }
+.hero-content { position: relative; z-index: 1; }
+.section-kicker { color: #d97706; font-size: .75rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.filter-panel { border: 1px solid #dce9e5 !important; box-shadow: 0 12px 32px rgba(23,59,55,.07) !important; }
+.pet-card { border: 1px solid #e0ebe8 !important; overflow: hidden; transition: transform .2s ease, box-shadow .2s ease; }
+.pet-card:hover { box-shadow: 0 16px 36px rgba(23,59,55,.13) !important; transform: translateY(-5px); }
+.pet-image { background: #e6f2ef; }
+.pet-status { font-weight: 700; }
+.pet-meta { color: #60736f; font-size: .87rem; }
+.auth-page { background: radial-gradient(circle at 20% 10%, rgb(79 209 197 / .18), transparent 28%), radial-gradient(circle at 80% 80%, rgb(245 158 11 / .12), transparent 25%); min-height: calc(100vh - 140px); }
+.auth-card { border: 1px solid rgb(15 118 110 / .12); overflow: hidden; }
+.auth-banner { background: linear-gradient(135deg, #0d524c, #0f766e); color: #fff; }
+.auth-icon { align-items: center; background: rgb(255 255 255 / .16); border: 1px solid rgb(255 255 255 / .24); border-radius: 16px; display: flex; height: 58px; justify-content: center; width: 58px; }
+.v-theme--larEPatasDark .auth-card { border-color: #2a413c; }.v-theme--larEPatasDark .auth-banner { background: linear-gradient(135deg, #102c29, #185f56); }
+@media (max-width: 960px) { .hero-gradient::after { display: none; } }

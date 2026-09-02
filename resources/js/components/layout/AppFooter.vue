@@ -1,0 +1,1 @@
+<template><v-footer class="bg-white border-t"><v-container class="d-flex flex-wrap justify-space-between py-7"><div><b style="color:#174c3c">Lar & Patas</b><div class="text-caption mt-1">Conectando histórias a novos lares.</div></div><div class="text-caption">© 2026 Lar & Patas</div></v-container></v-footer></template>

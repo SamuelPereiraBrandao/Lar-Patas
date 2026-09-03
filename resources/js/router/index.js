@@ -1,16 +1,16 @@
 import { createRouter, createWebHistory } from 'vue-router';
-import HomeView from '../views/HomeView.vue';
-import PetDetailsView from '../views/PetDetailsView.vue';
-import AdoptionFormView from '../views/AdoptionFormView.vue';
-import LoginView from '../views/LoginView.vue';
-import TwoFactorView from '../views/TwoFactorView.vue';
-import DashboardView from '../views/DashboardView.vue';
-import ProfileView from '../views/ProfileView.vue';
-import AdminPetsView from '../views/AdminPetsView.vue';
-import AdminUsersView from '../views/AdminUsersView.vue';
-import AdminSheltersView from '../views/AdminSheltersView.vue';
-import ForgotPasswordView from '../views/ForgotPasswordView.vue';
-import ResetPasswordView from '../views/ResetPasswordView.vue';
+import HomeView from '../views/public/HomeView.vue';
+import PetDetailsView from '../views/pets/PetDetailsView.vue';
+import AdoptionFormView from '../views/pets/AdoptionFormView.vue';
+import LoginView from '../views/auth/LoginView.vue';
+import TwoFactorView from '../views/auth/TwoFactorView.vue';
+import DashboardView from '../views/dashboards/AdopterDashboardView.vue';
+import ProfileView from '../views/account/ProfileView.vue';
+import AdminPetsView from '../views/admin/PetsSettingsView.vue';
+import AdminUsersView from '../views/admin/UsersSettingsView.vue';
+import ForgotPasswordView from '../views/auth/ForgotPasswordView.vue';
+import ResetPasswordView from '../views/auth/ResetPasswordView.vue';
+import DonorDashboardView from '../views/dashboards/DonorDashboardView.vue';
 
 const router = createRouter({
     history: createWebHistory(),
@@ -23,10 +23,11 @@ const router = createRouter({
         { path: '/redefinir-senha/:token', component: ResetPasswordView, props: true },
         { path: '/confirmar-acesso', component: TwoFactorView },
         { path: '/painel', component: DashboardView, meta: { requiresAuth: true } },
+        { path: '/painel/doador', component: DonorDashboardView, meta: { requiresAuth: true } },
         { path: '/perfil', component: ProfileView, meta: { requiresAuth: true } },
         { path: '/admin/pets', component: AdminPetsView, meta: { requiresAuth: true } },
         { path: '/admin/usuarios', component: AdminUsersView, meta: { requiresAuth: true } },
-        { path: '/admin/sedes', component: AdminSheltersView, meta: { requiresAuth: true } },
+        { path: '/admin/sedes', redirect: '/admin/pets' },
     ],
 });
 

@@ -9,11 +9,12 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
-#[Fillable(['name', 'email', 'password', 'phone', 'city', 'state', 'birth_date', 'housing_type', 'has_other_pets', 'household_description', 'two_factor_code', 'two_factor_expires_at'])]
+#[Fillable(['name', 'email', 'password', 'is_active', 'phone', 'city', 'state', 'birth_date', 'housing_type', 'has_other_pets', 'household_description', 'two_factor_code', 'two_factor_expires_at'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable implements MustVerifyEmail
 {
@@ -33,6 +34,7 @@ class User extends Authenticatable implements MustVerifyEmail
             'two_factor_expires_at' => 'datetime',
             'birth_date' => 'date',
             'has_other_pets' => 'boolean',
+            'is_active' => 'boolean',
         ];
     }
 
@@ -44,6 +46,11 @@ class User extends Authenticatable implements MustVerifyEmail
     public function hasRole(string $role): bool
     {
         return $this->roles()->where('name', $role)->exists();
+    }
+
+    public function adoptions(): HasMany
+    {
+        return $this->hasMany(Adoption::class);
     }
 
     public function sendEmailVerificationNotification(): void

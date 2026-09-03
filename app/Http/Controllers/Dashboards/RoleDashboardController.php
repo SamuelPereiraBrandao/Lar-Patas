@@ -1,7 +1,8 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Dashboards;
 
+use App\Http\Controllers\Controller;
 use App\Models\Adoption;
 use App\Models\Pet;
 use App\Models\Role;
@@ -22,6 +23,6 @@ class RoleDashboardController extends Controller
 
     public function admin(): JsonResponse
     {
-        return response()->json(['data' => ['pets_in_queue' => Pet::whereNotNull('queue_position')->count(), 'pending_adoptions' => Adoption::where('status', 'pending')->count(), 'donors' => Role::where('name', 'donor')->first()?->users()->count() ?? 0, 'receivers' => Role::where('name', 'receiver')->first()?->users()->count() ?? 0]]);
+        return response()->json(['data' => ['pets_in_queue' => Pet::whereNotNull('queue_position')->count(), 'pending_adoptions' => Adoption::where('status', 'pending')->count(), 'donors' => Role::where('name', 'donor')->first()?->users()->count() ?? 0, 'adopters' => Role::where('name', 'adopter')->first()?->users()->count() ?? 0]]);
     }
 }

@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { setSession } from '../stores/ui';
+import { setSession } from '../../stores/ui';
 
 const router = useRouter();
 const digits = ref(Array(6).fill(''));

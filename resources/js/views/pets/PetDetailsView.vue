@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
-import PetGallery from '../components/pets/PetGallery.vue';
+import PetGallery from '../../components/pets/PetGallery.vue';
 
 const props = defineProps({ id: String });
 const route = useRoute();
@@ -18,7 +18,7 @@ onMounted(async () => { pet.value = (await (await fetch(`/api/pets/${props.id}`)
   <v-container v-if="pet" class="py-10">
     <v-btn to="/" variant="text" prepend-icon="mdi-arrow-left">Voltar aos pets</v-btn>
     <v-row class="mt-3">
-      <v-col cols="12" md="7"><PetGallery :species="pet.species" /><v-card v-if="pet.shelter" class="mt-5 pa-5" rounded="xl" variant="tonal" color="primary"><div class="d-flex align-center ga-3"><v-avatar color="primary" variant="flat"><v-icon icon="mdi-home-heart" /></v-avatar><div><div class="font-weight-bold">{{ pet.shelter.name }}</div><div class="text-body-2">Sede de acolhimento: {{ shelterLocation }}</div></div></div></v-card></v-col>
+      <v-col cols="12" md="7"><PetGallery :species="pet.species" :photos="[pet.image_url, ...(pet.gallery_urls || [])]" /><v-card v-if="pet.shelter" class="mt-5 pa-5" rounded="xl" variant="tonal" color="primary"><div class="d-flex align-center ga-3"><v-avatar color="primary" variant="flat"><v-icon icon="mdi-home-heart" /></v-avatar><div><div class="font-weight-bold">{{ pet.shelter.name }}</div><div class="text-body-2">Sede de acolhimento: {{ shelterLocation }}</div></div></div></v-card></v-col>
       <v-col cols="12" md="5">
         <v-chip color="success">Disponível para adoção</v-chip><v-chip v-if="pet.is_interested" color="secondary" class="ml-2" prepend-icon="mdi-heart">Seu interesse está marcado</v-chip>
         <h1 class="text-h3 font-weight-black mt-4">{{ pet.name }}</h1><p class="text-h6 text-medium-emphasis">{{ pet.species === 'cat' ? 'Gato' : 'Cachorro' }} · {{ pet.age_label }} · Porte {{ pet.size }}</p>

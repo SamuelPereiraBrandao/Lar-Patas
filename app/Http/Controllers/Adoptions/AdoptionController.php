@@ -1,7 +1,8 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Adoptions;
 
+use App\Http\Controllers\Controller;
 use App\Models\Adoption;
 use App\Models\Pet;
 use Illuminate\Http\JsonResponse;

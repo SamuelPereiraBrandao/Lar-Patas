@@ -1,28 +1,28 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
-use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
-        Schema::table('adopter', function (Blueprint $table) {
-            //
-        });
+        if (! Schema::hasTable('roles')) {
+            return;
+        }
+
+        DB::table('roles')->where('name', 'receiver')->update(['name' => 'adopter', 'label' => 'Adotante', 'updated_at' => now()]);
+
+        foreach ([['admin', 'Administrador'], ['adopter', 'Adotante'], ['donor', 'Doador']] as [$name, $label]) {
+            DB::table('roles')->updateOrInsert(['name' => $name], ['label' => $label, 'created_at' => now(), 'updated_at' => now()]);
+        }
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
-        Schema::table('adopter', function (Blueprint $table) {
-            //
-        });
+        if (Schema::hasTable('roles')) {
+            DB::table('roles')->where('name', 'adopter')->update(['name' => 'receiver', 'label' => 'Receptor', 'updated_at' => now()]);
+        }
     }
 };

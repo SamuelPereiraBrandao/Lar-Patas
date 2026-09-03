@@ -1,12 +1,14 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Pets;
 
+use App\Http\Controllers\Controller;
 use App\Http\Requests\StorePetRequest;
 use App\Models\Pet;
 use App\Models\Shelter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 class PetController extends Controller
 {
@@ -61,9 +63,32 @@ class PetController extends Controller
     private function save(StorePetRequest $request, Pet $pet): Pet
     {
         $data = $request->validated();
+        $currentPaths = collect([$pet->image_path, ...($pet->gallery_paths ?? [])])->filter()->values();
+        $removedPaths = collect($request->input('removed_photo_paths', []))->intersect($currentPaths);
+        if ($removedPaths->isNotEmpty()) {
+            Storage::disk('public')->delete($removedPaths->all());
+            $remainingPaths = $currentPaths->diff($removedPaths)->values();
+            $data['image_path'] = $remainingPaths->first();
+            $data['gallery_paths'] = $remainingPaths->slice(1)->all();
+        }
+        $coverPath = $request->input('cover_photo_path');
+        $availablePaths = collect([$data['image_path'] ?? $pet->image_path, ...($data['gallery_paths'] ?? $pet->gallery_paths ?? [])])->filter()->values();
+        if ($coverPath && $availablePaths->contains($coverPath)) {
+            $data['image_path'] = $coverPath;
+            $data['gallery_paths'] = $availablePaths->reject(fn ($path) => $path === $coverPath)->values()->all();
+        }
         if ($request->hasFile('image')) {
             $data['image_path'] = $request->file('image')->store('pets', 'public');
-        }$pet->fill($data)->save();
+        }
+        if ($request->hasFile('photos')) {
+            $newPaths = collect($request->file('photos'))->map(fn ($photo) => $photo->store('pets/gallery', 'public'));
+            if (! $pet->image_path && ! isset($data['image_path'])) {
+                $data['image_path'] = $newPaths->shift();
+            }
+            $data['gallery_paths'] = [...($data['gallery_paths'] ?? $pet->gallery_paths ?? []), ...$newPaths->all()];
+        }
+        unset($data['image'], $data['photos'], $data['removed_photo_paths'], $data['cover_photo_path']);
+        $pet->fill($data)->save();
 
         return $pet;
     }

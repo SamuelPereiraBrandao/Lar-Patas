@@ -1,6 +1,6 @@
 <script setup>
 import { onMounted, ref } from 'vue';
-import PetGallery from '../components/pets/PetGallery.vue';
+import PetGallery from '../../components/pets/PetGallery.vue';
 
 const interests = ref([]);
 const loading = ref(true);

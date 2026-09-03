@@ -1,10 +1,10 @@
 <?php
 
-use App\Http\Controllers\AdminController;
-use App\Http\Controllers\AdoptionController;
-use App\Http\Controllers\AuthController;
-use App\Http\Controllers\PetController;
-use App\Http\Controllers\RoleDashboardController;
+use App\Http\Controllers\Admin\AdminController;
+use App\Http\Controllers\Adoptions\AdoptionController;
+use App\Http\Controllers\Auth\AuthController;
+use App\Http\Controllers\Dashboards\RoleDashboardController;
+use App\Http\Controllers\Pets\PetController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('pets', [PetController::class, 'index']);
@@ -22,8 +22,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('dashboards/admin', [RoleDashboardController::class, 'admin']);
     Route::get('admin/pets', [AdminController::class, 'pets']);
     Route::get('admin/users', [AdminController::class, 'users']);
+    Route::put('admin/users/{user}/roles', [AdminController::class, 'updateUserRoles']);
+    Route::put('admin/users/{user}/status', [AdminController::class, 'updateUserStatus']);
+    Route::get('admin/users/{user}/interests', [AdminController::class, 'userInterests']);
     Route::get('admin/shelters', [AdminController::class, 'shelters']);
     Route::post('admin/shelters', [AdminController::class, 'storeShelter']);
+    Route::put('admin/shelters/{shelter}/status', [AdminController::class, 'updateShelterStatus']);
     Route::post('logout', [AuthController::class, 'logout']);
     Route::apiResource('pets', PetController::class)->except(['index', 'show']);
     Route::get('adoptions', [AdoptionController::class, 'index']);

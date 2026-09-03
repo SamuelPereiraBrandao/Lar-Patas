@@ -1,9 +1,9 @@
 <script setup>
 import { computed } from 'vue';
 
-const props = defineProps({ species: { type: String, default: 'dog' }, height: { type: [Number, String], default: 460 } });
+const props = defineProps({ species: { type: String, default: 'dog' }, height: { type: [Number, String], default: 460 }, photos: { type: Array, default: () => [] } });
 
-const photos = computed(() => props.species === 'cat'
+const fallbackPhotos = computed(() => props.species === 'cat'
   ? [
       'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?auto=format&fit=crop&w=1400&q=90',
       'https://images.unsplash.com/photo-1495360010541-f48722b34f7d?auto=format&fit=crop&w=1400&q=90',
@@ -14,6 +14,7 @@ const photos = computed(() => props.species === 'cat'
       'https://images.unsplash.com/photo-1587300003388-59208cc962cb?auto=format&fit=crop&w=1400&q=90',
       'https://images.unsplash.com/photo-1543466835-00a7907e9de1?auto=format&fit=crop&w=1400&q=90',
     ]);
+const photos = computed(() => props.photos.filter(Boolean).length ? props.photos.filter(Boolean) : fallbackPhotos.value);
 </script>
 
 <template>

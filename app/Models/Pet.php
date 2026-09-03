@@ -12,11 +12,11 @@ class Pet extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['owner_id', 'name', 'species', 'breed', 'birth_date', 'size', 'sex', 'city', 'temperament', 'description', 'status', 'queue_position', 'triage_notes', 'image_path'];
+    protected $fillable = ['owner_id', 'shelter_id', 'name', 'species', 'breed', 'birth_date', 'size', 'sex', 'city', 'temperament', 'description', 'status', 'queue_position', 'triage_notes', 'image_path', 'gallery_paths'];
 
-    protected $casts = ['birth_date' => 'date'];
+    protected $casts = ['birth_date' => 'date', 'gallery_paths' => 'array'];
 
-    protected $appends = ['image_url', 'age_label'];
+    protected $appends = ['image_url', 'gallery_urls', 'age_label'];
 
     public function adoptions(): HasMany
     {
@@ -41,6 +41,11 @@ class Pet extends Model
     public function getImageUrlAttribute(): ?string
     {
         return $this->image_path ? Storage::url($this->image_path) : null;
+    }
+
+    public function getGalleryUrlsAttribute(): array
+    {
+        return collect($this->gallery_paths ?? [])->map(fn ($path) => Storage::url($path))->values()->all();
     }
 
     public function getAgeLabelAttribute(): string

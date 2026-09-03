@@ -1,8 +1,8 @@
 <script setup>
 import { onMounted, ref } from 'vue';
-import PetCard from '../components/pets/PetCard.vue';
-import PetFilters from '../components/pets/PetFilters.vue';
-import { usePetsStore } from '../stores/pets';
+import PetCard from '../../components/pets/PetCard.vue';
+import PetFilters from '../../components/pets/PetFilters.vue';
+import { usePetsStore } from '../../stores/pets';
 
 const store = usePetsStore();
 const filters = ref({ search: '', species: null, size: null, shelter: null });

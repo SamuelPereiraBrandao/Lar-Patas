@@ -1,7 +1,8 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Auth;
 
+use App\Http\Controllers\Controller;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
@@ -22,6 +23,11 @@ class AuthController extends Controller
 
         /** @var User $user */
         $user = Auth::user();
+        if (! $user->is_active) {
+            Auth::logout();
+
+            return response()->json(['message' => 'Esta conta está desativada. Procure a administração.'], 403);
+        }
         if (! $user->hasVerifiedEmail()) {
             Auth::logout();
 
@@ -48,7 +54,7 @@ class AuthController extends Controller
         Auth::login($user);
         $request->session()->regenerate();
 
-        return response()->json(['user' => $user]);
+        return response()->json(['user' => $user->load('roles')]);
     }
 
     public function resendTwoFactor(Request $request): JsonResponse
@@ -86,7 +92,8 @@ class AuthController extends Controller
     {
         $data = $request->validate(['name' => 'required|string|max:120', 'email' => 'required|email|unique:users,email', 'password' => ['required', 'confirmed', Password::min(8)]]);
         $user = User::create(['name' => $data['name'], 'email' => $data['email'], 'password' => Hash::make($data['password'])]);
-        $user->roles()->attach(Role::where('name', 'receiver')->value('id'));
+        $adopterRole = Role::firstOrCreate(['name' => 'adopter'], ['label' => 'Adotante']);
+        $user->roles()->syncWithoutDetaching([$adopterRole->id]);
         $user->sendEmailVerificationNotification();
 
         return response()->json(['message' => 'Cadastro criado. Confirme o link enviado ao seu e-mail para entrar.'], 201);

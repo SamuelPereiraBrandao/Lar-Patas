@@ -1,1 +1,17 @@
-export async function api<T>(url:string, options:RequestInit={}):Promise<T>{const token=localStorage.getItem('auth_token');const response=await fetch(url,{...options,headers:{Accept:'application/json',...(token?{Authorization:`Bearer ${token}`}:{}),...options.headers}});if(!response.ok)throw new Error('Não foi possível concluir a solicitação.');return response.json() as Promise<T>}
+export async function api<T>(
+    url: string,
+    options: RequestInit = {},
+): Promise<T> {
+    const token = localStorage.getItem("auth_token");
+    const response = await fetch(url, {
+        ...options,
+        headers: {
+            Accept: "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            ...options.headers,
+        },
+    });
+    if (!response.ok)
+        throw new Error("Não foi possível concluir a solicitação.");
+    return response.json() as Promise<T>;
+}

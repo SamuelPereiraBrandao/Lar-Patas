@@ -38,6 +38,16 @@ class Pet extends Model
         return $this->hasMany(Visit::class);
     }
 
+    public function likes(): HasMany
+    {
+        return $this->hasMany(PetLike::class);
+    }
+
+    public function messages(): HasMany
+    {
+        return $this->hasMany(Message::class);
+    }
+
     public function getImageUrlAttribute(): ?string
     {
         return $this->image_path ? Storage::url($this->image_path) : null;

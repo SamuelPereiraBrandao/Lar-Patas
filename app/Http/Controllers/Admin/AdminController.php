@@ -41,6 +41,14 @@ class AdminController extends Controller
         return response()->json(['data' => Shelter::create($request->validated())], 201);
     }
 
+    public function updateShelter(StoreShelterRequest $request, Shelter $shelter): JsonResponse
+    {
+        $this->ensureAdmin($request);
+        $shelter->update($request->validated());
+
+        return response()->json(['data' => $shelter->fresh()]);
+    }
+
     public function updateShelterStatus(Request $request, Shelter $shelter): JsonResponse
     {
         $this->ensureAdmin($request);

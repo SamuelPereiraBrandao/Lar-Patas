@@ -9,6 +9,7 @@ use App\Models\Shelter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 
 class PetController extends Controller
 {
@@ -29,9 +30,10 @@ class PetController extends Controller
     {
         $userId = $request->user('sanctum')?->id ?? $request->user()?->id;
 
-        $pet = Pet::query()->with('shelter:id,name,district,city,state')->withCount('adoptions')->withMax('adoptions as latest_interest_at', 'created_at')
+        $pet = Pet::query()->with('shelter:id,name,district,city,state')->withCount(['adoptions', 'likes'])->withMax('adoptions as latest_interest_at', 'created_at')
             ->when($userId, fn ($query) => $query->withExists([
                 'adoptions as is_interested' => fn ($adoptions) => $adoptions->where('user_id', $userId),
+                'likes as is_liked' => fn ($likes) => $likes->where('user_id', $userId),
             ]))
             ->findOrFail($pet->id);
 
@@ -65,6 +67,9 @@ class PetController extends Controller
         $data = $request->validated();
         $currentPaths = collect([$pet->image_path, ...($pet->gallery_paths ?? [])])->filter()->values();
         $removedPaths = collect($request->input('removed_photo_paths', []))->intersect($currentPaths);
+        if ($removedPaths->isNotEmpty() && $currentPaths->count() - $removedPaths->count() < 1) {
+            throw ValidationException::withMessages(['removed_photo_paths' => 'O pet precisa manter pelo menos uma foto.']);
+        }
         if ($removedPaths->isNotEmpty()) {
             Storage::disk('public')->delete($removedPaths->all());
             $remainingPaths = $currentPaths->diff($removedPaths)->values();

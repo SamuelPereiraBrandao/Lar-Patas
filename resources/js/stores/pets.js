@@ -1,1 +1,19 @@
-import {defineStore} from 'pinia';import {ref} from 'vue';export const usePetsStore=defineStore('pets',()=>{const pets=ref([]),loading=ref(false);async function fetchPets(filters={}){loading.value=true;try{const p=new URLSearchParams(Object.entries(filters).filter(([,v])=>v));const r=await fetch(`/api/pets?${p}`);pets.value=(await r.json()).data||[]}finally{loading.value=false}}return{pets,loading,fetchPets}});
+﻿import { defineStore } from "pinia";
+import { ref } from "vue";
+export const usePetsStore = defineStore("pets", () => {
+    const pets = ref([]),
+        loading = ref(false);
+    async function fetchPets(filters = {}) {
+        loading.value = true;
+        try {
+            const p = new URLSearchParams(
+                Object.entries(filters).filter(([, v]) => v),
+            );
+            const r = await fetch(`/api/pets?${p}`);
+            pets.value = (await r.json()).data || [];
+        } finally {
+            loading.value = false;
+        }
+    }
+    return { pets, loading, fetchPets };
+});

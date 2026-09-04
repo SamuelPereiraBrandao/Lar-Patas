@@ -1,34 +1,479 @@
-<script setup>
-import { computed, onMounted, ref } from 'vue';
+﻿<script setup>
+import { computed, onMounted, ref } from "vue";
+import { notify } from "../../stores/ui";
 
-const users = ref([]); const search = ref(''); const searchOpen = ref(false); const filterDialog = ref(false); const optionsMenu = ref(false); const roleDialog = ref(false); const confirmStatusDialog = ref(false); const editing = ref(null); const statusTarget = ref(null); const selectedRoles = ref([]); const expanded = ref([]); const userInterests = ref({}); const saving = ref(false); const snackbar = ref(false); const snackbarMessage = ref('');
-const filters = ref({ role: null, status: null }); const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-const headers = [{ title: 'Usuário', key: 'name' }, { title: 'Localidade', key: 'city' }, { title: 'Cargos', key: 'roles' }, { title: 'Status', key: 'is_active' }, { title: 'Ações', key: 'actions', sortable: false }, { title: '', key: 'data-table-expand' }];
-const roleOptions = [{ title: 'Administrador', value: 'admin' }, { title: 'Adotante', value: 'adopter' }, { title: 'Doador', value: 'donor' }];
-const activeFilters = computed(() => Object.values(filters.value).filter((value) => value !== null).length);
-const filteredUsers = computed(() => users.value.filter((user) => { const term = search.value.toLowerCase(); return (!term || [user.name, user.email, user.city, user.state].filter(Boolean).join(' ').toLowerCase().includes(term)) && (!filters.value.status || (filters.value.status === 'active') === user.is_active) && (!filters.value.role || user.roles.some((role) => role.name === filters.value.role)); }));
-async function load() { const response = await fetch('/api/admin/users', { credentials: 'same-origin', headers: { Accept: 'application/json' } }); if (response.ok) users.value = (await response.json()).data; }
-function clearFilters() { filters.value = { role: null, status: null }; filterDialog.value = false; }
-function toggleFilter(key, value) { filters.value[key] = filters.value[key] === value ? null : value; }
-function editRoles(user) { editing.value = user; selectedRoles.value = user.roles.map((role) => role.name); roleDialog.value = true; }
-async function saveRoles() { saving.value = true; const response = await fetch(`/api/admin/users/${editing.value.id}/roles`, { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-TOKEN': csrf }, body: JSON.stringify({ roles: selectedRoles.value }) }); saving.value = false; if (response.ok) { roleDialog.value = false; await load(); } }
-function askStatusChange(user) { statusTarget.value = user; confirmStatusDialog.value = true; }
-async function toggleStatus() { const user = statusTarget.value; if (!user) return; const response = await fetch(`/api/admin/users/${user.id}/status`, { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-TOKEN': csrf }, body: JSON.stringify({ is_active: !user.is_active }) }); if (response.ok) { confirmStatusDialog.value = false; snackbarMessage.value = user.is_active ? 'Conta desativada com sucesso.' : 'Conta ativada com sucesso.'; snackbar.value = true; await load(); } }
-async function updateExpanded(ids) { expanded.value = ids; for (const id of ids) { if (userInterests.value[id]) continue; const response = await fetch(`/api/admin/users/${id}/interests`, { credentials: 'same-origin', headers: { Accept: 'application/json' } }); if (response.ok) userInterests.value[id] = (await response.json()).data; } }
-function petStatus(status) { return ({ available: 'Disponível', in_process: 'Em processo', adopted: 'Adotado' }[status] || status); }
-function petStatusColor(status) { return ({ available: 'success', in_process: 'warning', adopted: 'secondary' }[status] || 'default'); }
+const users = ref([]);
+const search = ref("");
+const searchOpen = ref(false);
+const filterDialog = ref(false);
+const optionsMenu = ref(false);
+const roleDialog = ref(false);
+const confirmStatusDialog = ref(false);
+const editing = ref(null);
+const statusTarget = ref(null);
+const selectedRoles = ref([]);
+const expanded = ref([]);
+const userInterests = ref({});
+const saving = ref(false);
+const filters = ref({ role: null, status: null });
+const csrf =
+    document
+        .querySelector('meta[name="csrf-token"]')
+        ?.getAttribute("content") || "";
+const headers = [
+    { title: "Usuário", key: "name" },
+    { title: "Localidade", key: "city" },
+    { title: "Cargos", key: "roles" },
+    { title: "Status", key: "is_active" },
+    { title: "Ações", key: "actions", sortable: false },
+    { title: "", key: "data-table-expand" },
+];
+const roleOptions = [
+    { title: "Administrador", value: "admin" },
+    { title: "Adotante", value: "adopter" },
+    { title: "Doador", value: "donor" },
+];
+const activeFilters = computed(
+    () => Object.values(filters.value).filter((value) => value !== null).length,
+);
+const filteredUsers = computed(() =>
+    users.value.filter((user) => {
+        const term = search.value.toLowerCase();
+        return (
+            (!term ||
+                [user.name, user.email, user.city, user.state]
+                    .filter(Boolean)
+                    .join(" ")
+                    .toLowerCase()
+                    .includes(term)) &&
+            (!filters.value.status ||
+                (filters.value.status === "active") === user.is_active) &&
+            (!filters.value.role ||
+                user.roles.some((role) => role.name === filters.value.role))
+        );
+    }),
+);
+async function load() {
+    const response = await fetch("/api/admin/users", {
+        credentials: "same-origin",
+        headers: { Accept: "application/json" },
+    });
+    if (response.ok) users.value = (await response.json()).data;
+}
+function clearFilters() {
+    filters.value = { role: null, status: null };
+    filterDialog.value = false;
+}
+function toggleFilter(key, value) {
+    filters.value[key] = filters.value[key] === value ? null : value;
+}
+function editRoles(user) {
+    editing.value = user;
+    selectedRoles.value = user.roles.map((role) => role.name);
+    roleDialog.value = true;
+}
+async function saveRoles() {
+    saving.value = true;
+    const response = await fetch(`/api/admin/users/${editing.value.id}/roles`, {
+        method: "PUT",
+        credentials: "same-origin",
+        headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            "X-CSRF-TOKEN": csrf,
+        },
+        body: JSON.stringify({ roles: selectedRoles.value }),
+    });
+    saving.value = false;
+    if (response.ok) {
+        roleDialog.value = false;
+        await load();
+        notify("Cargos do usuário atualizados.");
+    } else {
+        notify("Não foi possível atualizar os cargos.", "error");
+    }
+}
+function askStatusChange(user) {
+    statusTarget.value = user;
+    confirmStatusDialog.value = true;
+}
+async function toggleStatus() {
+    const user = statusTarget.value;
+    if (!user) return;
+    const response = await fetch(`/api/admin/users/${user.id}/status`, {
+        method: "PUT",
+        credentials: "same-origin",
+        headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            "X-CSRF-TOKEN": csrf,
+        },
+        body: JSON.stringify({ is_active: !user.is_active }),
+    });
+    if (response.ok) {
+        confirmStatusDialog.value = false;
+        notify(
+            user.is_active
+                ? "Conta desativada com sucesso."
+                : "Conta ativada com sucesso.",
+        );
+        await load();
+    } else {
+        notify("Não foi possível alterar o status da conta.", "error");
+    }
+}
+async function updateExpanded(ids) {
+    expanded.value = ids;
+    for (const id of ids) {
+        if (userInterests.value[id]) continue;
+        const response = await fetch(`/api/admin/users/${id}/interests`, {
+            credentials: "same-origin",
+            headers: { Accept: "application/json" },
+        });
+        if (response.ok) userInterests.value[id] = (await response.json()).data;
+    }
+}
+function petStatus(status) {
+    return (
+        {
+            available: "Disponível",
+            in_process: "Em processo",
+            adopted: "Adotado",
+        }[status] || status
+    );
+}
+function petStatusColor(status) {
+    return (
+        { available: "success", in_process: "warning", adopted: "secondary" }[
+            status
+        ] || "default"
+    );
+}
 onMounted(load);
 </script>
 
 <template>
-  <v-container class="py-10"><div class="section-kicker">ADMINISTRAÇÃO</div><h1 class="text-h4 font-weight-bold">Usuários e cargos</h1><p class="text-medium-emphasis mt-2 mb-7">Controle cargos e acesso da plataforma. Um usuário pode ser Administrador, Adotante e Doador ao mesmo tempo.</p>
-    <v-card rounded="xl" class="overflow-hidden"><div class="pa-4"><div class="d-flex align-center ga-2"><v-btn icon="mdi-magnify" variant="text" color="primary" @click="searchOpen = !searchOpen" /><v-expand-x-transition><v-text-field v-if="searchOpen" v-model="search" class="admin-search" label="Buscar nome, e-mail ou cidade" density="compact" hide-details variant="outlined" clearable /></v-expand-x-transition><v-spacer /><v-menu v-model="optionsMenu" location="bottom end"><template #activator="{ props }"><v-btn v-bind="props" prepend-icon="mdi-dots-horizontal" variant="outlined">Opções</v-btn></template><v-list min-width="220"><v-list-item prepend-icon="mdi-refresh" title="Atualizar tabela" @click="load(); optionsMenu = false" /></v-list></v-menu></div><div class="quick-filter-bar mt-3 d-flex flex-wrap align-center ga-3"><div class="filter-group d-flex align-center ga-2"><v-icon icon="mdi-account-group-outline" size="18" /><span class="filter-label">Cargos</span><v-chip :color="filters.role === 'admin' ? 'secondary' : undefined" :variant="filters.role === 'admin' ? 'flat' : 'outlined'" @click="toggleFilter('role', 'admin')">Administrador</v-chip><v-chip :color="filters.role === 'adopter' ? 'primary' : undefined" :variant="filters.role === 'adopter' ? 'flat' : 'outlined'" @click="toggleFilter('role', 'adopter')">Adotante</v-chip><v-chip :color="filters.role === 'donor' ? 'info' : undefined" :variant="filters.role === 'donor' ? 'flat' : 'outlined'" @click="toggleFilter('role', 'donor')">Doador</v-chip></div><v-divider vertical class="filter-divider" /><div class="filter-group d-flex align-center ga-2"><v-icon icon="mdi-account-check-outline" size="18" /><span class="filter-label">Status</span><v-chip :color="filters.status === 'active' ? 'success' : undefined" :variant="filters.status === 'active' ? 'flat' : 'outlined'" @click="toggleFilter('status', 'active')">Ativos</v-chip><v-chip :color="filters.status === 'inactive' ? 'error' : undefined" :variant="filters.status === 'inactive' ? 'flat' : 'outlined'" @click="toggleFilter('status', 'inactive')">Desativados</v-chip></div><v-btn v-if="activeFilters" class="ml-auto" size="small" variant="text" color="error" prepend-icon="mdi-filter-remove-outline" @click="clearFilters">Limpar filtros</v-btn></div></div>
-      <v-data-table v-model:expanded="expanded" :headers="headers" :items="filteredUsers" item-value="id" show-expand hover @update:expanded="updateExpanded"><template #item.name="{ item }"><div class="d-flex align-center ga-3"><v-avatar :color="item.is_active ? 'primary' : 'grey'" size="36"><span class="text-white font-weight-bold">{{ item.name.slice(0, 1) }}</span></v-avatar><div><div class="font-weight-bold">{{ item.name }}</div><div class="text-caption">{{ item.email }}</div></div></div></template><template #item.city="{ item }">{{ item.city ? `${item.city} - ${item.state || ''}` : 'Não informado' }}</template><template #item.roles="{ item }"><v-chip v-for="role in item.roles" :key="role.id" class="mr-1" :color="role.name === 'admin' ? 'secondary' : role.name === 'donor' ? 'info' : 'primary'" size="small" variant="tonal">{{ role.label }}</v-chip></template><template #item.is_active="{ item }"><v-chip :color="item.is_active ? 'success' : 'error'" size="small">{{ item.is_active ? 'Ativo' : 'Desativado' }}</v-chip></template><template #item.actions="{ item }"><div class="d-flex ga-1"><v-btn icon="mdi-account-cog-outline" size="small" color="primary" variant="tonal" @click="editRoles(item)" /><v-btn :icon="item.is_active ? 'mdi-account-off-outline' : 'mdi-account-check-outline'" size="small" :color="item.is_active ? 'error' : 'success'" variant="tonal" @click="askStatusChange(item)" /></div></template><template #expanded-row="{ columns, item }"><tr><td :colspan="columns.length"><div class="pa-4"><b>Pets em que {{ item.name }} demonstrou interesse</b><v-list v-if="userInterests[item.id]?.length" density="compact"><v-list-item v-for="interest in userInterests[item.id]" :key="interest.id" :to="`/pets/${interest.pet?.id}`" prepend-icon="mdi-paw" :title="interest.pet?.name" :subtitle="`${interest.pet?.city} · Interesse em ${new Date(interest.created_at).toLocaleDateString('pt-BR')}`"><template #append><v-chip :color="petStatusColor(interest.pet?.status)" size="small">{{ petStatus(interest.pet?.status) }}</v-chip><v-icon class="ml-2" icon="mdi-arrow-right" /></template></v-list-item></v-list><p v-else class="text-medium-emphasis mt-3">Nenhum interesse registrado.</p></div></td></tr></template></v-data-table>
-    </v-card>
-    <v-dialog v-model="roleDialog" max-width="520"><v-card rounded="xl"><v-card-title class="pa-6">Cargos de {{ editing?.name }}</v-card-title><v-card-text><p class="text-medium-emphasis mb-4">Selecione todos os cargos aplicáveis.</p><v-select v-model="selectedRoles" :items="roleOptions" label="Cargos" multiple chips variant="outlined" /></v-card-text><v-card-actions class="pa-6 pt-0"><v-spacer /><v-btn variant="text" @click="roleDialog = false">Cancelar</v-btn><v-btn :loading="saving" color="primary" @click="saveRoles">Salvar cargos</v-btn></v-card-actions></v-card></v-dialog>
-    <v-dialog v-model="confirmStatusDialog" max-width="480"><v-card rounded="xl"><v-card-title class="pa-6">{{ statusTarget?.is_active ? 'Desativar conta?' : 'Ativar conta?' }}</v-card-title><v-card-text>Tem certeza que deseja {{ statusTarget?.is_active ? 'desativar' : 'ativar' }} a conta de <strong>{{ statusTarget?.name }}</strong>?</v-card-text><v-card-actions class="pa-6 pt-0"><v-spacer /><v-btn variant="text" @click="confirmStatusDialog = false">Cancelar</v-btn><v-btn :color="statusTarget?.is_active ? 'error' : 'success'" @click="toggleStatus">{{ statusTarget?.is_active ? 'Desativar conta' : 'Ativar conta' }}</v-btn></v-card-actions></v-card></v-dialog>
-    <v-snackbar v-model="snackbar" :timeout="3000" location="top" color="success" rounded="lg">{{ snackbarMessage }}</v-snackbar>
-  </v-container>
+    <v-container class="py-10"
+        ><div class="section-kicker">ADMINISTRAÇÃO</div>
+        <h1 class="text-h4 font-weight-bold">Usuários e cargos</h1>
+        <p class="text-medium-emphasis mt-2 mb-7">
+            Controle cargos e acesso da plataforma. Um usuário pode ser
+            Administrador, Adotante e Doador ao mesmo tempo.
+        </p>
+        <v-card rounded="xl" class="overflow-hidden"
+            ><div class="pa-4">
+                <div class="d-flex align-center ga-2">
+                    <v-btn
+                        icon="mdi-magnify"
+                        variant="text"
+                        color="primary"
+                        @click="searchOpen = !searchOpen"
+                    /><v-expand-x-transition
+                        ><v-text-field
+                            v-if="searchOpen"
+                            v-model="search"
+                            class="admin-search"
+                            label="Buscar nome, e-mail ou cidade"
+                            density="compact"
+                            hide-details
+                            variant="outlined"
+                            clearable /></v-expand-x-transition
+                    ><v-spacer /><v-menu
+                        v-model="optionsMenu"
+                        location="bottom end"
+                        ><template #activator="{ props }"
+                            ><v-btn
+                                v-bind="props"
+                                prepend-icon="mdi-dots-horizontal"
+                                variant="outlined"
+                                >Opções</v-btn
+                            ></template
+                        ><v-list min-width="220"
+                            ><v-list-item
+                                prepend-icon="mdi-refresh"
+                                title="Atualizar tabela"
+                                @click="
+                                    load();
+                                    optionsMenu = false;
+                                " /></v-list
+                    ></v-menu>
+                </div>
+                <div
+                    class="quick-filter-bar mt-3 d-flex flex-wrap align-center ga-3"
+                >
+                    <div class="filter-group d-flex align-center ga-2">
+                        <v-icon
+                            icon="mdi-account-group-outline"
+                            size="18"
+                        /><span class="filter-label">Cargos</span
+                        ><v-chip
+                            :color="
+                                filters.role === 'admin'
+                                    ? 'secondary'
+                                    : undefined
+                            "
+                            :variant="
+                                filters.role === 'admin' ? 'flat' : 'outlined'
+                            "
+                            @click="toggleFilter('role', 'admin')"
+                            >Administrador</v-chip
+                        ><v-chip
+                            :color="
+                                filters.role === 'adopter'
+                                    ? 'primary'
+                                    : undefined
+                            "
+                            :variant="
+                                filters.role === 'adopter' ? 'flat' : 'outlined'
+                            "
+                            @click="toggleFilter('role', 'adopter')"
+                            >Adotante</v-chip
+                        ><v-chip
+                            :color="
+                                filters.role === 'donor' ? 'info' : undefined
+                            "
+                            :variant="
+                                filters.role === 'donor' ? 'flat' : 'outlined'
+                            "
+                            @click="toggleFilter('role', 'donor')"
+                            >Doador</v-chip
+                        >
+                    </div>
+                    <v-divider vertical class="filter-divider" />
+                    <div class="filter-group d-flex align-center ga-2">
+                        <v-icon
+                            icon="mdi-account-check-outline"
+                            size="18"
+                        /><span class="filter-label">Status</span
+                        ><v-chip
+                            :color="
+                                filters.status === 'active'
+                                    ? 'success'
+                                    : undefined
+                            "
+                            :variant="
+                                filters.status === 'active'
+                                    ? 'flat'
+                                    : 'outlined'
+                            "
+                            @click="toggleFilter('status', 'active')"
+                            >Ativos</v-chip
+                        ><v-chip
+                            :color="
+                                filters.status === 'inactive'
+                                    ? 'error'
+                                    : undefined
+                            "
+                            :variant="
+                                filters.status === 'inactive'
+                                    ? 'flat'
+                                    : 'outlined'
+                            "
+                            @click="toggleFilter('status', 'inactive')"
+                            >Desativados</v-chip
+                        >
+                    </div>
+                    <v-btn
+                        v-if="activeFilters"
+                        class="ml-auto"
+                        size="small"
+                        variant="text"
+                        color="error"
+                        prepend-icon="mdi-filter-remove-outline"
+                        @click="clearFilters"
+                        >Limpar filtros</v-btn
+                    >
+                </div>
+            </div>
+            <v-data-table
+                v-model:expanded="expanded"
+                :headers="headers"
+                :items="filteredUsers"
+                item-value="id"
+                show-expand
+                hover
+                @update:expanded="updateExpanded"
+                ><template #item.name="{ item }"
+                    ><div class="d-flex align-center ga-3">
+                        <v-avatar
+                            :color="item.is_active ? 'primary' : 'grey'"
+                            size="36"
+                            ><span class="text-white font-weight-bold">{{
+                                item.name.slice(0, 1)
+                            }}</span></v-avatar
+                        >
+                        <div>
+                            <div class="font-weight-bold">{{ item.name }}</div>
+                            <div class="text-caption">{{ item.email }}</div>
+                        </div>
+                    </div></template
+                ><template #item.city="{ item }">{{
+                    item.city
+                        ? `${item.city} - ${item.state || ""}`
+                        : "Não informado"
+                }}</template
+                ><template #item.roles="{ item }"
+                    ><v-chip
+                        v-for="role in item.roles"
+                        :key="role.id"
+                        class="mr-1"
+                        :color="
+                            role.name === 'admin'
+                                ? 'secondary'
+                                : role.name === 'donor'
+                                  ? 'info'
+                                  : 'primary'
+                        "
+                        size="small"
+                        variant="tonal"
+                        >{{ role.label }}</v-chip
+                    ></template
+                ><template #item.is_active="{ item }"
+                    ><v-chip
+                        :color="item.is_active ? 'success' : 'error'"
+                        size="small"
+                        >{{ item.is_active ? "Ativo" : "Desativado" }}</v-chip
+                    ></template
+                ><template #item.actions="{ item }"
+                    ><div class="d-flex ga-1">
+                        <v-btn
+                            icon="mdi-account-cog-outline"
+                            size="small"
+                            color="primary"
+                            variant="tonal"
+                            @click="editRoles(item)"
+                        /><v-btn
+                            :icon="
+                                item.is_active
+                                    ? 'mdi-account-off-outline'
+                                    : 'mdi-account-check-outline'
+                            "
+                            size="small"
+                            :color="item.is_active ? 'error' : 'success'"
+                            variant="tonal"
+                            @click="askStatusChange(item)"
+                        /></div></template
+                ><template #expanded-row="{ columns, item }"
+                    ><tr>
+                        <td :colspan="columns.length">
+                            <div class="pa-4">
+                                <b
+                                    >Pets em que {{ item.name }} demonstrou
+                                    interesse</b
+                                ><v-list
+                                    v-if="userInterests[item.id]?.length"
+                                    density="compact"
+                                    ><v-list-item
+                                        v-for="interest in userInterests[
+                                            item.id
+                                        ]"
+                                        :key="interest.id"
+                                        :to="`/pets/${interest.pet?.id}`"
+                                        prepend-icon="mdi-paw"
+                                        :title="interest.pet?.name"
+                                        :subtitle="`${interest.pet?.city} · Interesse em ${new Date(interest.created_at).toLocaleDateString('pt-BR')}`"
+                                        ><template #append
+                                            ><v-chip
+                                                :color="
+                                                    petStatusColor(
+                                                        interest.pet?.status,
+                                                    )
+                                                "
+                                                size="small"
+                                                >{{
+                                                    petStatus(
+                                                        interest.pet?.status,
+                                                    )
+                                                }}</v-chip
+                                            ><v-icon
+                                                class="ml-2"
+                                                icon="mdi-arrow-right" /></template></v-list-item
+                                ></v-list>
+                                <p v-else class="text-medium-emphasis mt-3">
+                                    Nenhum interesse registrado.
+                                </p>
+                            </div>
+                        </td>
+                    </tr></template
+                ></v-data-table
+            >
+        </v-card>
+        <v-dialog v-model="roleDialog" max-width="520"
+            ><v-card rounded="xl"
+                ><v-card-title class="pa-6"
+                    >Cargos de {{ editing?.name }}</v-card-title
+                ><v-card-text
+                    ><p class="text-medium-emphasis mb-4">
+                        Selecione todos os cargos aplicáveis.
+                    </p>
+                    <v-select
+                        v-model="selectedRoles"
+                        :items="roleOptions"
+                        label="Cargos"
+                        multiple
+                        chips
+                        variant="outlined" /></v-card-text
+                ><v-card-actions class="pa-6 pt-0"
+                    ><v-spacer /><v-btn
+                        variant="text"
+                        @click="roleDialog = false"
+                        >Cancelar</v-btn
+                    ><v-btn :loading="saving" color="primary" @click="saveRoles"
+                        >Salvar cargos</v-btn
+                    ></v-card-actions
+                ></v-card
+            ></v-dialog
+        >
+        <v-dialog v-model="confirmStatusDialog" max-width="480"
+            ><v-card rounded="xl"
+                ><v-card-title class="pa-6">{{
+                    statusTarget?.is_active
+                        ? "Desativar conta?"
+                        : "Ativar conta?"
+                }}</v-card-title
+                ><v-card-text
+                    >Tem certeza que deseja
+                    {{ statusTarget?.is_active ? "desativar" : "ativar" }} a
+                    conta de <strong>{{ statusTarget?.name }}</strong
+                    >?</v-card-text
+                ><v-card-actions class="pa-6 pt-0"
+                    ><v-spacer /><v-btn
+                        variant="text"
+                        @click="confirmStatusDialog = false"
+                        >Cancelar</v-btn
+                    ><v-btn
+                        :color="statusTarget?.is_active ? 'error' : 'success'"
+                        @click="toggleStatus"
+                        >{{
+                            statusTarget?.is_active
+                                ? "Desativar conta"
+                                : "Ativar conta"
+                        }}</v-btn
+                    ></v-card-actions
+                ></v-card
+            ></v-dialog
+        >
+    </v-container>
 </template>
 
-<style scoped>.admin-search { max-width: 310px; }.quick-filter-bar { background: rgba(21, 126, 112, .08); border: 1px solid rgba(52, 185, 169, .16); border-radius: 14px; padding: 10px 12px; }.filter-label { font-size: .78rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; opacity: .78; }.filter-divider { min-height: 28px; }</style>
+<style scoped>
+.admin-search {
+    max-width: 310px;
+}
+.quick-filter-bar {
+    background: rgba(21, 126, 112, 0.08);
+    border: 1px solid rgba(52, 185, 169, 0.16);
+    border-radius: 14px;
+    padding: 10px 12px;
+}
+.filter-label {
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    opacity: 0.78;
+}
+.filter-divider {
+    min-height: 28px;
+}
+</style>

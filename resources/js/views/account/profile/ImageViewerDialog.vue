@@ -30,6 +30,12 @@ function submit() {
     emit("comment", currentPost.value, draft.value);
     draft.value = "";
 }
+function avatarUrl(user) {
+    return (
+        user?.avatar_url ||
+        (user?.avatar_path ? `/storage/${user.avatar_path}` : null)
+    );
+}
 function previous() {
     index.value =
         (index.value - 1 + imagePosts.value.length) % imagePosts.value.length;
@@ -118,8 +124,8 @@ function next() {
                         >
                             <v-avatar size="32" color="primary"
                                 ><v-img
-                                    v-if="item.user.avatar_url"
-                                    :src="item.user.avatar_url"
+                                    v-if="avatarUrl(item.user)"
+                                    :src="avatarUrl(item.user)"
                                     cover
                                 /><span v-else>{{
                                     item.user.name?.[0]
@@ -147,11 +153,7 @@ function next() {
                         </div>
                     </div>
                     <div class="compose">
-                        <v-btn
-                            icon="mdi-send"
-                            color="primary"
-                            @click="submit"
-                        /><v-textarea
+                        <v-textarea
                             v-model="draft"
                             hide-details
                             rows="2"
@@ -159,6 +161,10 @@ function next() {
                             variant="outlined"
                             label="Escreva um comentário"
                             @keydown.ctrl.enter.prevent="submit"
+                        /><v-btn
+                            icon="mdi-send"
+                            color="primary"
+                            @click="submit"
                         /></div
                 ></v-col> </v-row
         ></v-card>
@@ -167,7 +173,8 @@ function next() {
 <style scoped>
 .image-pane {
     position: relative;
-    min-height: 520px;
+    height: clamp(480px, 72vh, 620px);
+    min-height: 0;
     padding: 14px;
     overflow: hidden;
     background: transparent;
@@ -176,6 +183,7 @@ function next() {
     gap: 16px;
     margin: 0;
     padding: 16px;
+    align-items: stretch;
 }
 .viewer-row > .v-col {
     padding: 0;
@@ -222,7 +230,8 @@ function next() {
 }
 .comments-pane {
     display: flex;
-    min-height: 520px;
+    height: clamp(480px, 72vh, 620px);
+    min-height: 0;
     flex-direction: column;
     padding: 30px 28px;
 }
@@ -235,7 +244,8 @@ function next() {
     flex: 1;
     align-content: start;
     gap: 10px;
-    max-height: 360px;
+    min-height: 0;
+    max-height: none;
     overflow: auto;
 }
 .comment {
@@ -281,6 +291,7 @@ function next() {
     }
     .image-pane,
     .comments-pane {
+        height: auto;
         min-height: 380px;
     }
 }

@@ -8,9 +8,14 @@ export const userRoles = ref(
     JSON.parse(localStorage.getItem("user_roles") || "[]"),
 );
 export const toast = ref({ open: false, message: "", type: "success" });
+export const chatTarget = ref(null);
+export const isChatOpen = ref(false);
 
 export function notify(message, type = "success") {
     toast.value = { open: true, message, type };
+}
+export function openChat(user) {
+    chatTarget.value = user;
 }
 
 export function toggleTheme() {

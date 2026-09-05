@@ -7,10 +7,14 @@ import {
     reactive,
     ref,
 } from "vue";
-import { notify, setSession } from "../../stores/ui";
+import { notify, openChat, setSession } from "../../stores/ui";
 import ProfileEditDialog from "./profile/ProfileEditDialog.vue";
 import ImageViewerDialog from "./profile/ImageViewerDialog.vue";
 import ProfilePostCard from "./profile/ProfilePostCard.vue";
+
+const props = defineProps({
+    userId: { type: [String, Number], default: null },
+});
 
 const profile = ref(null),
     posts = ref([]),
@@ -27,6 +31,9 @@ const profile = ref(null),
     page = ref(1),
     hasMore = ref(false),
     loadingMore = ref(false),
+    canEdit = ref(!props.userId),
+    friendRequestSent = ref(false),
+    friendshipStatus = ref(null),
     feedEnd = ref(null);
 let feedObserver;
 const newPost = reactive({ body: "", pet_id: null });
@@ -59,8 +66,56 @@ function openImagePost(url, title) {
     viewerTitle.value = title;
     viewerOpen.value = true;
 }
+function openPost(post) {
+    viewerPost.value = post;
+    viewerTitle.value = "";
+    viewerOpen.value = true;
+}
 function say(message) {
     notify(message, "success");
+}
+const friendActionLabel = computed(() => {
+    if (friendshipStatus.value === "accepted") return "Remover amizade";
+    if (friendshipStatus.value === "sent")
+        return "Cancelar solicitação de amizade";
+    return "Adicionar amigo";
+});
+const friendActionIcon = computed(() =>
+    friendshipStatus.value === "accepted" || friendshipStatus.value === "sent"
+        ? "mdi-close-circle-outline"
+        : "mdi-account-plus-outline",
+);
+const friendActionColor = computed(() =>
+    friendshipStatus.value === "accepted" || friendshipStatus.value === "sent"
+        ? "error"
+        : "primary",
+);
+async function addFriend() {
+    const response = await fetch(
+        `/api/users/${profile.value.id}/friend-requests`,
+        { method: "POST", credentials: "same-origin", headers: jsonHeaders },
+    );
+    notify(
+        response.ok
+            ? "Solicitação de amizade enviada."
+            : "Não foi possível enviar a solicitação.",
+        response.ok ? "success" : "error",
+    );
+    if (response.ok) {
+        friendRequestSent.value = true;
+        friendshipStatus.value = "sent";
+    }
+}
+async function cancelFriendRequest() {
+    const response = await fetch(
+        `/api/users/${profile.value.id}/friend-requests`,
+        { method: "DELETE", credentials: "same-origin", headers: jsonHeaders },
+    );
+    if (response.ok) {
+        friendRequestSent.value = false;
+        friendshipStatus.value = null;
+        notify("Solicitação de amizade cancelada.");
+    }
 }
 function filePicked(value) {
     postFile.value = Array.isArray(value)
@@ -69,8 +124,11 @@ function filePicked(value) {
     postImageName.value = postFile.value?.name || "";
 }
 async function load() {
+    const socialUrl = props.userId
+        ? `/api/users/${props.userId}/profile?page=1`
+        : "/api/profile/social?page=1";
     const [social, location] = await Promise.all([
-        fetch("/api/profile/social?page=1", {
+        fetch(socialUrl, {
             credentials: "same-origin",
             headers: formHeaders,
         }),
@@ -87,12 +145,18 @@ async function load() {
     hasMore.value = !!data.pagination?.has_more;
     adoptedPets.value = data.adopted_pets;
     stats.value = data.stats;
+    canEdit.value = data.is_owner ?? !props.userId;
+    friendshipStatus.value = data.friendship_status;
+    friendRequestSent.value = friendshipStatus.value === "sent";
     if (location.ok) locations.value = (await location.json()).data;
 }
 async function loadMore() {
     if (!hasMore.value || loadingMore.value) return;
     loadingMore.value = true;
-    const response = await fetch(`/api/profile/social?page=${page.value + 1}`, {
+    const endpoint = props.userId
+        ? `/api/users/${props.userId}/profile?page=${page.value + 1}`
+        : `/api/profile/social?page=${page.value + 1}`;
+    const response = await fetch(endpoint, {
         credentials: "same-origin",
         headers: formHeaders,
     });
@@ -205,10 +269,37 @@ onBeforeUnmount(() => feedObserver?.disconnect());
                             </p>
                         </div>
                         <v-btn
+                            v-if="canEdit"
                             color="primary"
                             prepend-icon="mdi-pencil"
                             @click="editOpen = true"
                             >Editar perfil</v-btn
+                        >
+                        <v-btn
+                            v-else-if="friendshipStatus === 'accepted'"
+                            color="primary"
+                            prepend-icon="mdi-message-text"
+                            variant="tonal"
+                            @click="openChat(profile)"
+                            >Mensagem</v-btn
+                        >
+                        <v-btn
+                            v-else
+                            :color="friendActionColor"
+                            :prepend-icon="friendActionIcon"
+                            @click="
+                                friendshipStatus
+                                    ? cancelFriendRequest()
+                                    : addFriend()
+                            "
+                            >{{ friendActionLabel }}</v-btn
+                        >
+                        <v-btn
+                            v-if="!canEdit && friendshipStatus === 'accepted'"
+                            color="error"
+                            prepend-icon="mdi-account-minus-outline"
+                            @click="cancelFriendRequest"
+                            >Remover amizade</v-btn
                         >
                     </div>
                     <p v-if="profile.household_description" class="bio">
@@ -232,7 +323,7 @@ onBeforeUnmount(() => feedObserver?.disconnect());
             </section>
             <v-row
                 ><v-col cols="12" md="7"
-                    ><v-card rounded="xl" class="mb-5"
+                    ><v-card v-if="canEdit" rounded="xl" class="mb-5"
                         ><v-card-text class="pa-5"
                             ><b>Compartilhe uma novidade</b
                             ><v-textarea
@@ -286,7 +377,8 @@ onBeforeUnmount(() => feedObserver?.disconnect());
                         :key="post.id"
                         :post="post"
                         :author="profile"
-                        @comment="comment" />
+                        @comment="comment"
+                        @view="openPost" />
                     <v-card
                         v-if="!posts.length"
                         rounded="xl"
@@ -355,6 +447,7 @@ onBeforeUnmount(() => feedObserver?.disconnect());
             @load-more="loadMore"
         />
         <ProfileEditDialog
+            v-if="canEdit"
             v-model="editOpen"
             :profile="profile"
             :locations="locations"

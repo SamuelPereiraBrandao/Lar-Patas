@@ -268,7 +268,7 @@ watch(
                         ><v-select
                             v-model="form.state"
                             :items="states"
-                            label="UF"
+                            label="Estado (UF)"
                             variant="outlined" /></v-col
                     ><v-col cols="12" md="4"
                         ><v-select

@@ -1,15 +1,21 @@
 ﻿<script setup>
-import { computed, onMounted, ref } from "vue";
+import * as Ably from "ably";
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import { useRoute } from "vue-router";
 import PetGallery from "../../components/pets/PetGallery.vue";
+import { notify, userAvatar, userName } from "../../stores/ui";
 
 const props = defineProps({ id: String });
 const route = useRoute();
 const pet = ref(null);
-const interestSnackbar = ref(route.query.interest === "success");
 const messages = ref([]),
     messageDraft = ref(""),
-    chatLoading = ref(false);
+    chatLoading = ref(false),
+    commentsPage = ref(1),
+    hasMoreComments = ref(false),
+    loadingMoreComments = ref(false);
+const profileSummaries = reactive({});
+let realtime;
 const csrf =
     document
         .querySelector('meta[name="csrf-token"]')
@@ -47,14 +53,36 @@ async function toggleLike() {
     pet.value.is_liked = data.liked;
     pet.value.likes_count = data.likes_count;
 }
-async function loadConversation() {
+async function loadConversation(page = 1, append = false) {
     chatLoading.value = true;
-    const response = await fetch(`/api/pets/${pet.value.id}/messages`, {
+    const response = await fetch(
+        `/api/pets/${pet.value.id}/messages?page=${page}`,
+        {
+            credentials: "same-origin",
+            headers: { Accept: "application/json" },
+        },
+    );
+    if (response.ok) {
+        const data = await response.json();
+        messages.value = append ? [...data.data, ...messages.value] : data.data;
+        commentsPage.value = data.pagination?.current_page || page;
+        hasMoreComments.value = !!data.pagination?.has_more;
+    }
+    chatLoading.value = false;
+}
+async function loadMoreComments() {
+    if (!hasMoreComments.value || loadingMoreComments.value) return;
+    loadingMoreComments.value = true;
+    await loadConversation(commentsPage.value + 1, true);
+    loadingMoreComments.value = false;
+}
+async function loadProfileSummary(userId) {
+    if (!userId || profileSummaries[userId]) return;
+    const response = await fetch(`/api/users/${userId}/profile`, {
         credentials: "same-origin",
         headers: { Accept: "application/json" },
     });
-    if (response.ok) messages.value = (await response.json()).data;
-    chatLoading.value = false;
+    if (response.ok) profileSummaries[userId] = await response.json();
 }
 async function sendMessage() {
     if (!messageDraft.value.trim()) return;
@@ -65,29 +93,41 @@ async function sendMessage() {
         body: JSON.stringify({ body: messageDraft.value }),
     });
     if (!response.ok) return;
-    messages.value.push((await response.json()).data);
+    const message = (await response.json()).data;
+    if (!messages.value.some((item) => item.id === message.id)) {
+        messages.value.push(message);
+    }
     messageDraft.value = "";
+}
+function connectRealtime() {
+    if (!pet.value?.id) return;
+    realtime = new Ably.Realtime({
+        authUrl: "/api/realtime/token",
+        authMethod: "GET",
+    });
+    const channel = realtime.channels.get(`pet:${pet.value.id}:messages`);
+    channel.subscribe("message:created", (event) => {
+        const message = event.data;
+        if (
+            message?.id &&
+            !messages.value.some((item) => item.id === message.id)
+        ) {
+            messages.value.push(message);
+        }
+    });
 }
 onMounted(async () => {
     pet.value = (await (await fetch(`/api/pets/${props.id}`)).json()).data;
     loadConversation();
+    connectRealtime();
+    if (route.query.interest === "success") {
+        notify("Interesse marcado! Você pode acompanhá-lo na sua Visão geral.");
+    }
 });
+onBeforeUnmount(() => realtime?.close());
 </script>
 
 <template>
-    <v-snackbar
-        v-model="interestSnackbar"
-        color="success"
-        :timeout="3000"
-        location="top"
-        rounded="lg"
-        >Interesse marcado! Você pode acompanhá-lo na sua Visão geral.<template
-            #actions
-            ><v-btn variant="text" @click="interestSnackbar = false"
-                >Fechar</v-btn
-            ></template
-        ></v-snackbar
-    >
     <v-container v-if="pet" class="py-10">
         <v-btn to="/" variant="text" prepend-icon="mdi-arrow-left"
             >Voltar aos pets</v-btn
@@ -248,6 +288,15 @@ onMounted(async () => {
                     <v-progress-circular indeterminate color="primary" />
                 </div>
                 <div v-else class="chat-list">
+                    <v-btn
+                        v-if="hasMoreComments"
+                        :loading="loadingMoreComments"
+                        variant="text"
+                        color="primary"
+                        prepend-icon="mdi-chevron-up"
+                        @click="loadMoreComments"
+                        >Carregar comentários anteriores</v-btn
+                    >
                     <div
                         v-for="message in messages"
                         :key="message.id"
@@ -261,9 +310,95 @@ onMounted(async () => {
                             />
                             <span v-else>{{ message.user.name?.[0] }}</span>
                         </v-avatar>
-                        <div class="chat-content">
+                        <div
+                            class="chat-content"
+                            @mouseenter="loadProfileSummary(message.user.id)"
+                        >
                             <div class="d-flex align-center flex-wrap ga-2">
-                                <b>{{ message.user.name }}</b>
+                                <div class="author-wrap">
+                                    <a
+                                        class="comment-author"
+                                        :href="`/perfil/${message.user.id}`"
+                                        >{{ message.user.name }}</a
+                                    >
+                                    <v-card
+                                        class="profile-popover pa-4"
+                                        rounded="xl"
+                                    >
+                                        <div class="d-flex align-center ga-3">
+                                            <v-avatar color="primary" size="48">
+                                                <v-img
+                                                    v-if="
+                                                        profileSummaries[
+                                                            message.user.id
+                                                        ]?.profile.avatar_url
+                                                    "
+                                                    :src="
+                                                        profileSummaries[
+                                                            message.user.id
+                                                        ].profile.avatar_url
+                                                    "
+                                                    cover
+                                                />
+                                                <span v-else>{{
+                                                    message.user.name?.[0]
+                                                }}</span>
+                                            </v-avatar>
+                                            <div>
+                                                <b>{{ message.user.name }}</b>
+                                                <div class="text-caption">
+                                                    {{
+                                                        profileSummaries[
+                                                            message.user.id
+                                                        ]?.profile.city ||
+                                                        message.user.city ||
+                                                        "Localidade não informada"
+                                                    }}{{
+                                                        profileSummaries[
+                                                            message.user.id
+                                                        ]?.profile.state ||
+                                                        message.user.state
+                                                            ? ` · ${profileSummaries[message.user.id]?.profile.state || message.user.state}`
+                                                            : ""
+                                                    }}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div
+                                            v-if="
+                                                profileSummaries[
+                                                    message.user.id
+                                                ]
+                                            "
+                                            class="d-flex ga-4 mt-3 text-caption"
+                                        >
+                                            <span
+                                                ><b>{{
+                                                    profileSummaries[
+                                                        message.user.id
+                                                    ].stats.interests
+                                                }}</b>
+                                                interesses</span
+                                            >
+                                            <span
+                                                ><b>{{
+                                                    profileSummaries[
+                                                        message.user.id
+                                                    ].stats.adoptions
+                                                }}</b>
+                                                adoções</span
+                                            >
+                                        </div>
+                                        <v-btn
+                                            :to="`/perfil/${message.user.id}`"
+                                            color="primary"
+                                            variant="tonal"
+                                            block
+                                            class="mt-3"
+                                            >Ver perfil</v-btn
+                                        >
+                                    </v-card>
+                                </div>
                                 <span class="chat-date">{{
                                     new Date(message.created_at).toLocaleString(
                                         "pt-BR",
@@ -282,9 +417,10 @@ onMounted(async () => {
                     </p>
                 </div>
                 <div class="comment-composer mt-5">
-                    <v-avatar color="primary" size="40"
-                        ><v-icon icon="mdi-account"
-                    /></v-avatar>
+                    <v-avatar color="primary" size="40">
+                        <v-img v-if="userAvatar" :src="userAvatar" cover />
+                        <span v-else>{{ userName?.[0] || "A" }}</span>
+                    </v-avatar>
                     <v-textarea
                         v-model="messageDraft"
                         hide-details
@@ -326,6 +462,33 @@ onMounted(async () => {
 .chat-content {
     display: grid;
     gap: 3px;
+}
+.comment-author {
+    color: inherit;
+    font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+}
+.comment-author:hover {
+    color: rgb(var(--v-theme-primary));
+    text-decoration: underline;
+}
+.author-wrap {
+    position: relative;
+    display: inline-flex;
+}
+.profile-popover {
+    width: 280px;
+    display: none;
+    position: absolute;
+    z-index: 8;
+    top: calc(100% + 8px);
+    left: 0;
+    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.28);
+}
+.author-wrap:hover .profile-popover,
+.profile-popover:hover {
+    display: block;
 }
 .chat-date {
     font-size: 0.72rem;

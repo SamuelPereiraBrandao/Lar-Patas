@@ -17,9 +17,9 @@ const icon = computed(
         :timeout="3000"
         class="app-toast"
         ><div class="d-flex align-center ga-3">
-            <v-icon :icon="icon" :color="toast.type" /><span>{{
-                toast.message
-            }}</span
+            <v-icon :icon="icon" :color="toast.type" /><span
+                class="toast-message"
+                >{{ toast.message }}</span
             ><v-spacer /><v-btn
                 icon="mdi-close"
                 size="small"
@@ -38,5 +38,15 @@ const icon = computed(
 }
 .app-toast :deep(.v-snackbar__content) {
     padding: 14px 16px;
+    color: rgb(var(--v-theme-on-surface));
+    font-weight: 600;
+}
+.toast-message {
+    color: rgb(var(--v-theme-on-surface));
+    opacity: 1;
+}
+.app-toast :deep(.v-btn) {
+    color: rgb(var(--v-theme-on-surface));
+    opacity: 0.85;
 }
 </style>

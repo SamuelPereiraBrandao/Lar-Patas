@@ -1,5 +1,5 @@
 ﻿<script setup>
-import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import ShelterManagerDialog from "../../components/admin/ShelterManagerDialog.vue";
 import { notify } from "../../stores/ui";
 
@@ -47,14 +47,26 @@ const samplePhotos = (species) =>
               "https://images.unsplash.com/photo-1587300003388-59208cc962cb?auto=format&fit=crop&w=1400&q=90",
               "https://images.unsplash.com/photo-1543466835-00a7907e9de1?auto=format&fit=crop&w=1400&q=90",
           ];
+function photoList(value) {
+    if (Array.isArray(value)) return value;
+    if (typeof value === "string") {
+        try {
+            const parsed = JSON.parse(value);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch {
+            return value ? [value] : [];
+        }
+    }
+    return value && typeof value === "object" ? Object.values(value) : [];
+}
 const galleryPhotos = computed(() => {
     const paths = [
         editingPet.value?.image_path,
-        ...(editingPet.value?.gallery_paths || []),
+        ...photoList(editingPet.value?.gallery_paths),
     ].filter(Boolean);
     const urls = [
         editingPet.value?.image_url,
-        ...(editingPet.value?.gallery_urls || []),
+        ...photoList(editingPet.value?.gallery_urls),
     ].filter(Boolean);
     const stored = paths
         .map((path, index) => ({ path, url: urls[index] }))
@@ -156,7 +168,7 @@ function pickPhoto() {
 function removePhoto(index) {
     const paths = [
         editingPet.value?.image_path,
-        ...(editingPet.value?.gallery_paths || []),
+        ...photoList(editingPet.value?.gallery_paths),
     ].filter(Boolean);
     const availablePaths = paths.filter(
         (path) => !removedPhotoPaths.value.includes(path),
@@ -176,7 +188,7 @@ function removePhoto(index) {
 function makeCover(index) {
     const paths = [
         editingPet.value?.image_path,
-        ...(editingPet.value?.gallery_paths || []),
+        ...photoList(editingPet.value?.gallery_paths),
     ].filter(Boolean);
     if (paths[index]) coverPhotoPath.value = paths[index];
 }
@@ -218,60 +230,14 @@ async function savePet() {
         );
     }
 }
-function activatePhotoControls() {
-    document.querySelectorAll("button").forEach((button) => {
-        const label = button.textContent.toLocaleLowerCase("pt-BR");
-        if (
-            label.includes("adicionar fotos") ||
-            label.includes("salvar alterações")
-        ) {
-            button.disabled = false;
-            button.removeAttribute("disabled");
-            button.removeAttribute("aria-disabled");
-            button.classList.remove("v-btn--disabled");
-            button.style.pointerEvents = "auto";
-            button.style.opacity = "1";
-            if (label.includes("adicionar fotos")) button.onclick = pickPhoto;
-            if (label.includes("salvar alterações")) button.onclick = savePet;
-        }
-    });
-    document.querySelectorAll(".photo-card").forEach((card, index) => {
-        const buttons = card.querySelectorAll("button");
-        const deleteButton = buttons.item(buttons.length - 1);
-        if (deleteButton) {
-            deleteButton.disabled = false;
-            deleteButton.removeAttribute("disabled");
-            deleteButton.classList.remove("v-btn--disabled");
-            deleteButton.style.pointerEvents = "auto";
-            deleteButton.onclick = () => removePhoto(index);
-        }
-        if (buttons.length > 1) {
-            const coverButton = buttons.item(0);
-            coverButton.disabled = false;
-            coverButton.removeAttribute("disabled");
-            coverButton.classList.remove("v-btn--disabled");
-            coverButton.style.pointerEvents = "auto";
-            coverButton.onclick = () => makeCover(index);
-        }
-    });
-}
 onMounted(() => {
     load();
-    new MutationObserver(activatePhotoControls).observe(document.body, {
-        childList: true,
-        subtree: true,
-    });
 });
 watch(shelterDialog, (open) => {
     if (open) {
         shelterDialog.value = false;
         shelterManager.value = true;
     }
-});
-watch(petDialog, async (open) => {
-    if (!open) return;
-    await nextTick();
-    setTimeout(activatePhotoControls, 100);
 });
 </script>
 <template>
@@ -484,9 +450,9 @@ watch(petDialog, async (open) => {
                         >Galeria de fotos</v-tab
                     ></v-tabs
                 ><v-divider /><v-card-text class="pa-6"
-                    ><v-window v-model="petTab"
-                        ><v-window-item value="details"
-                            ><v-row
+                    ><div>
+                        <div v-show="petTab === 'details'">
+                            <v-row
                                 ><v-col cols="12" md="7"
                                     ><v-text-field
                                         v-model="petForm.name"
@@ -584,9 +550,11 @@ watch(petDialog, async (open) => {
                                             },
                                         ]"
                                         label="Situação"
-                                        variant="outlined" /></v-col></v-row></v-window-item
-                        ><v-window-item value="gallery"
-                            ><div
+                                        variant="outlined" /></v-col
+                            ></v-row>
+                        </div>
+                        <div v-show="petTab === 'gallery'">
+                            <div
                                 class="d-flex align-center justify-space-between mb-4"
                             >
                                 <div>
@@ -602,7 +570,7 @@ watch(petDialog, async (open) => {
                                 <v-btn
                                     color="primary"
                                     prepend-icon="mdi-image-plus"
-                                    disabled
+                                    @click="pickPhoto"
                                     >Adicionar fotos</v-btn
                                 >
                             </div>
@@ -627,13 +595,13 @@ watch(petDialog, async (open) => {
                                                     size="small"
                                                     color="white"
                                                     variant="flat"
-                                                    disabled
+                                                    @click="makeCover(index)"
                                                 /><v-btn
                                                     icon="mdi-delete-outline"
                                                     size="small"
                                                     color="error"
                                                     variant="flat"
-                                                    disabled
+                                                    @click="removePhoto(index)"
                                                 /></div
                                         ></v-img>
                                         <div class="px-3 py-2 text-caption">
@@ -645,16 +613,9 @@ watch(petDialog, async (open) => {
                                         </div></v-card
                                     ></v-col
                                 ></v-row
-                            ><v-alert
-                                type="info"
-                                variant="tonal"
-                                class="mt-5"
-                                rounded="lg"
-                                >O gerenciamento de upload foi pausado
-                                temporariamente.</v-alert
-                            ></v-window-item
-                        ></v-window
-                    ></v-card-text
+                            >
+                        </div>
+                    </div></v-card-text
                 ><v-card-actions class="pa-6 pt-0"
                     ><v-spacer /><v-btn
                         variant="text"
@@ -663,7 +624,8 @@ watch(petDialog, async (open) => {
                     ><v-btn
                         color="primary"
                         prepend-icon="mdi-content-save-outline"
-                        disabled
+                        :loading="saving"
+                        @click="savePet"
                         >Salvar alterações</v-btn
                     ></v-card-actions
                 ></v-card

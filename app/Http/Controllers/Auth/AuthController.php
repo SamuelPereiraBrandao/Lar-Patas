@@ -90,8 +90,8 @@ class AuthController extends Controller
 
     public function register(Request $request): JsonResponse
     {
-        $data = $request->validate(['name' => 'required|string|max:120', 'email' => 'required|email|unique:users,email', 'password' => ['required', 'confirmed', Password::min(8)]]);
-        $user = User::create(['name' => $data['name'], 'email' => $data['email'], 'password' => Hash::make($data['password'])]);
+        $data = $request->validate(['name' => 'required|string|max:120', 'email' => 'required|email|unique:users,email', 'password' => ['required', 'confirmed', Password::min(8)], 'city' => 'required|string|max:100', 'state' => 'required|string|size:2', 'housing_type' => 'required|in:Casa com quintal,Casa sem quintal,Apartamento', 'has_other_pets' => 'boolean', 'household_description' => 'nullable|string|max:1000']);
+        $user = User::create([...collect($data)->except('password')->all(), 'password' => Hash::make($data['password'])]);
         $adopterRole = Role::firstOrCreate(['name' => 'adopter'], ['label' => 'Adotante']);
         $user->roles()->syncWithoutDetaching([$adopterRole->id]);
         $user->sendEmailVerificationNotification();

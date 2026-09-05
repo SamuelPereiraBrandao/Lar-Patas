@@ -35,4 +35,9 @@ return [
         ],
     ],
 
+    'ably' => [
+        'key' => env('ABLY_API_KEY'),
+        'verify_ssl' => env('ABLY_VERIFY_SSL', true),
+    ],
+
 ];

@@ -1,20 +1,18 @@
 ﻿<script setup>
-import { computed, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { notify } from "../../stores/ui";
 
 const router = useRouter();
 const route = useRoute();
 const mode = ref("login");
-const error = ref("");
-const success = ref(
-    route.query.verified
-        ? "E-mail confirmado. Você já pode entrar."
-        : route.query.reset
-          ? "Senha redefinida. Entre com sua nova senha."
-          : route.query.expired
-            ? "Sua sessão expirou. Entre novamente para continuar."
-            : "",
-);
+const initialNotice = route.query.verified
+    ? "E-mail confirmado. Você já pode entrar."
+    : route.query.reset
+      ? "Senha redefinida. Entre com sua nova senha."
+      : route.query.expired
+        ? "Sua sessão expirou. Entre novamente para continuar."
+        : "";
 const loading = ref(false);
 const showPassword = ref(false);
 const showConfirmation = ref(false);
@@ -24,7 +22,25 @@ const registerForm = reactive({
     email: "",
     password: "",
     password_confirmation: "",
+    city: "",
+    state: "",
+    housing_type: null,
+    has_other_pets: false,
+    household_description: "",
 });
+const locations = ref([]);
+const states = computed(() =>
+    locations.value.map((state) => ({
+        title: `${state.name} (${state.code})`,
+        value: state.code,
+    })),
+);
+const cities = computed(
+    () =>
+        locations.value
+            .find((state) => state.code === registerForm.state)
+            ?.cities.map((city) => city.name) || [],
+);
 const csrf =
     document
         .querySelector('meta[name="csrf-token"]')
@@ -38,8 +54,29 @@ const headers = {
 const title = computed(() =>
     mode.value === "login" ? "Boas-vindas de volta" : "Crie seu acesso",
 );
+function translatedError(data) {
+    const entries = Object.entries(data.errors || {});
+    if (!entries.length)
+        return data.message || "Não foi possível concluir a ação.";
+    const [field, messages] = entries[0];
+    const labels = {
+        name: "Nome completo",
+        email: "E-mail",
+        password: "Senha",
+        password_confirmation: "Confirmação de senha",
+        state: "Estado (UF)",
+        city: "Cidade",
+        housing_type: "Tipo de moradia",
+    };
+    const label = labels[field] || field;
+    const message = messages?.[0] || "";
+    let text = message.includes("required")
+        ? `O campo ${label} é obrigatório.`
+        : `Verifique o campo ${label}.`;
+    if (entries.length > 1) text += " Revise também os demais campos.";
+    return text;
+}
 async function login() {
-    error.value = "";
     loading.value = true;
     const response = await fetch("/login", {
         method: "POST",
@@ -49,16 +86,13 @@ async function login() {
     });
     loading.value = false;
     if (!response.ok) {
-        error.value =
-            (await response.json()).message || "Não foi possível entrar.";
+        notify(translatedError(await response.json()), "error");
         return;
     }
     sessionStorage.setItem("after_2fa", route.query.next || "/painel");
     router.push("/confirmar-acesso");
 }
 async function register() {
-    error.value = "";
-    success.value = "";
     loading.value = true;
     const response = await fetch("/api/register", {
         method: "POST",
@@ -67,14 +101,26 @@ async function register() {
     });
     loading.value = false;
     if (!response.ok) {
-        error.value =
-            (await response.json()).message ||
-            "Não foi possível criar o cadastro.";
+        notify(translatedError(await response.json()), "error");
         return;
     }
-    success.value = (await response.json()).message;
+    notify((await response.json()).message);
     mode.value = "login";
 }
+watch(
+    () => registerForm.state,
+    () => {
+        if (registerForm.city && !cities.value.includes(registerForm.city))
+            registerForm.city = "";
+    },
+);
+onMounted(async () => {
+    if (initialNotice) notify(initialNotice);
+    const response = await fetch("/api/locations", {
+        headers: { Accept: "application/json" },
+    });
+    if (response.ok) locations.value = (await response.json()).data;
+});
 </script>
 
 <template>
@@ -99,22 +145,7 @@ async function register() {
                     }}
                 </p>
             </div>
-            <v-card-text class="pa-6 pa-md-8"
-                ><v-alert
-                    v-if="success"
-                    type="success"
-                    variant="tonal"
-                    rounded="lg"
-                    class="mb-5"
-                    >{{ success }}</v-alert
-                ><v-alert
-                    v-if="error"
-                    type="error"
-                    variant="tonal"
-                    rounded="lg"
-                    class="mb-5"
-                    >{{ error }}</v-alert
-                >
+            <v-card-text class="pa-6 pa-md-8">
                 <v-form v-if="mode === 'login'" @submit.prevent="login"
                     ><v-text-field
                         v-model="loginForm.email"
@@ -200,6 +231,56 @@ async function register() {
                         @click:append-inner="
                             showConfirmation = !showConfirmation
                         " />
+                    <v-divider class="my-5" />
+                    <div class="text-subtitle-2 font-weight-bold mb-3">
+                        Sobre seu lar
+                    </div>
+                    <v-row dense>
+                        <v-col cols="12" md="4"
+                            ><v-select
+                                v-model="registerForm.state"
+                                :items="states"
+                                label="Estado (UF)"
+                                variant="outlined"
+                                required
+                        /></v-col>
+                        <v-col cols="12" md="8"
+                            ><v-select
+                                v-model="registerForm.city"
+                                :items="cities"
+                                :disabled="!registerForm.state"
+                                label="Cidade"
+                                variant="outlined"
+                                required
+                        /></v-col>
+                        <v-col cols="12"
+                            ><v-select
+                                v-model="registerForm.housing_type"
+                                :items="[
+                                    'Casa com quintal',
+                                    'Casa sem quintal',
+                                    'Apartamento',
+                                ]"
+                                label="Tipo de moradia"
+                                variant="outlined"
+                                required
+                        /></v-col>
+                        <v-col cols="12"
+                            ><v-checkbox
+                                v-model="registerForm.has_other_pets"
+                                label="Tenho outros animais em casa"
+                                color="primary"
+                                hide-details
+                        /></v-col>
+                        <v-col cols="12"
+                            ><v-textarea
+                                v-model="registerForm.household_description"
+                                label="Conte brevemente sobre seu lar (opcional)"
+                                variant="outlined"
+                                rows="2"
+                                auto-grow
+                        /></v-col>
+                    </v-row>
                     <div class="text-caption text-medium-emphasis mb-5">
                         Use ao menos 8 caracteres para criar sua senha.
                     </div>

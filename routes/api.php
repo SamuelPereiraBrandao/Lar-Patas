@@ -8,6 +8,9 @@ use App\Http\Controllers\Locations\LocationController;
 use App\Http\Controllers\Pets\PetController;
 use App\Http\Controllers\Pets\PetSocialController;
 use App\Http\Controllers\Profiles\ProfileController;
+use App\Http\Controllers\Social\DirectMessageController;
+use App\Http\Controllers\Social\FriendshipController;
+use App\Http\Controllers\Social\RealtimeController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('pets', [PetController::class, 'index']);
@@ -25,6 +28,18 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('profile', [AuthController::class, 'user']);
     Route::put('profile', [AuthController::class, 'updateProfile']);
     Route::get('profile/social', [ProfileController::class, 'show']);
+    Route::get('users/{user}/profile', [ProfileController::class, 'publicProfile']);
+    Route::post('users/{user}/friend-requests', [FriendshipController::class, 'send']);
+    Route::delete('users/{user}/friend-requests', [FriendshipController::class, 'cancel']);
+    Route::patch('friend-requests/{friendRequest}', [FriendshipController::class, 'respond']);
+    Route::get('notifications', [FriendshipController::class, 'notifications']);
+    Route::post('notifications/read', [FriendshipController::class, 'read']);
+    Route::get('realtime/token', [RealtimeController::class, 'token']);
+    Route::get('chat/contacts', [DirectMessageController::class, 'contacts']);
+    Route::post('chat/users/{user}', [DirectMessageController::class, 'open']);
+    Route::get('chat/conversations/{conversation}/messages', [DirectMessageController::class, 'messages']);
+    Route::post('chat/conversations/{conversation}/messages', [DirectMessageController::class, 'store']);
+    Route::post('chat/messages/{message}/likes', [DirectMessageController::class, 'toggleLike']);
     Route::post('profile/avatar', [ProfileController::class, 'uploadAvatar']);
     Route::post('profile/banner', [ProfileController::class, 'uploadBanner']);
     Route::delete('profile/avatar', [ProfileController::class, 'removeAvatar']);

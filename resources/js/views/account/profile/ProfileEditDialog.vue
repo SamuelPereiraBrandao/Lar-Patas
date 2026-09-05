@@ -168,7 +168,7 @@ async function save() {
                                 ><v-select
                                     v-model="form.state"
                                     :items="states"
-                                    label="UF"
+                                    label="Estado (UF)"
                                     variant="outlined" /></v-col
                             ><v-col cols="12" md="8"
                                 ><v-select

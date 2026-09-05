@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Profiles;
 
 use App\Http\Controllers\Controller;
+use App\Models\FriendRequest;
 use App\Models\ProfilePost;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -56,6 +58,44 @@ class ProfileController extends Controller
         $comment = $post->comments()->create(['user_id' => $request->user()->id, 'body' => $data['body']]);
 
         return response()->json(['comment' => $comment->load('user:id,name,avatar_path')], 201);
+    }
+
+    public function publicProfile(Request $request, User $user): JsonResponse
+    {
+        $viewerId = $request->user()->id;
+        $friendship = FriendRequest::query()
+            ->where(function ($query) use ($viewerId, $user) {
+                $query->where('sender_id', $viewerId)
+                    ->where('recipient_id', $user->id)
+                    ->orWhere(function ($reverseQuery) use ($viewerId, $user) {
+                        $reverseQuery->where('sender_id', $user->id)
+                            ->where('recipient_id', $viewerId);
+                    });
+            })
+            ->first();
+        $posts = $user->profilePosts()
+            ->with(['pet:id,name,image_path', 'comments.user:id,name,avatar_path'])
+            ->latest()
+            ->paginate(3);
+        $adoptedPets = $user->adoptions()->where('status', 'approved')->with('pet:id,name,image_path')->get()->pluck('pet')->filter()->values();
+
+        return response()->json([
+            'profile' => $user->only(['id', 'name', 'city', 'state', 'avatar_url', 'banner_url', 'household_description']),
+            'is_owner' => $request->user()->is($user),
+            'stats' => [
+                'interests' => $user->adoptions()->count(),
+                'adoptions' => $user->adoptions()->where('status', 'approved')->count(),
+                'posts' => $user->profilePosts()->count(),
+            ],
+            'friendship_status' => $friendship
+                ? ($friendship->status === 'pending'
+                    ? ($friendship->sender_id === $viewerId ? 'sent' : 'received')
+                    : $friendship->status)
+                : null,
+            'posts' => $posts->items(),
+            'adopted_pets' => $adoptedPets,
+            'pagination' => ['current_page' => $posts->currentPage(), 'has_more' => $posts->hasMorePages()],
+        ]);
     }
 
     private function uploadProfileImage(Request $request, string $field, string $folder, string $attribute): JsonResponse

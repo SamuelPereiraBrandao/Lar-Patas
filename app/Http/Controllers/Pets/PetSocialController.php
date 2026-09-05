@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Pets;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\PublishAblyMessage;
 use App\Models\Pet;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -23,14 +24,19 @@ class PetSocialController extends Controller
 
     public function messages(Pet $pet): JsonResponse
     {
-        return response()->json(['data' => $pet->messages()->with('user:id,name,avatar_path')->latest()->take(30)->get()->reverse()->values()]);
+        $messages = $pet->messages()->with('user:id,name,avatar_path,city,state')->latest()->paginate(5);
+
+        return response()->json(['data' => $messages->getCollection()->reverse()->values(), 'pagination' => ['current_page' => $messages->currentPage(), 'has_more' => $messages->hasMorePages()]]);
     }
 
     public function storeMessage(Request $request, Pet $pet): JsonResponse
     {
         $data = $request->validate(['body' => 'required|string|max:1000']);
         $message = $pet->messages()->create(['user_id' => $request->user()->id, 'body' => $data['body']]);
+        $messageData = $message->load('user:id,name,avatar_path,city,state');
 
-        return response()->json(['data' => $message->load('user:id,name,avatar_path')], 201);
+        PublishAblyMessage::dispatch("pet:{$pet->id}:messages", $messageData->toArray());
+
+        return response()->json(['data' => $messageData], 201);
     }
 }

@@ -6,6 +6,7 @@ import LoginView from "../views/auth/LoginView.vue";
 import TwoFactorView from "../views/auth/TwoFactorView.vue";
 import DashboardView from "../views/dashboards/AdopterDashboardView.vue";
 import ProfileView from "../views/account/ProfileView.vue";
+import PublicProfileView from "../views/account/PublicProfileView.vue";
 import AdminPetsView from "../views/admin/PetsSettingsView.vue";
 import AdminUsersView from "../views/admin/UsersSettingsView.vue";
 import ForgotPasswordView from "../views/auth/ForgotPasswordView.vue";
@@ -50,7 +51,8 @@ const router = createRouter({
         },
         {
             path: "/perfil/:id",
-            redirect: "/perfil",
+            component: PublicProfileView,
+            props: true,
             meta: { requiresAuth: true },
         },
         {

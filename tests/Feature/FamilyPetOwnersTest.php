@@ -15,6 +15,23 @@ class FamilyPetOwnersTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_pet_details_show_all_confirmed_caretakers_without_pending_invitations(): void
+    {
+        $creator = User::factory()->create();
+        $confirmed = User::factory()->count(2)->create();
+        $pending = User::factory()->create();
+        $pet = Pet::factory()->create(['owner_id' => $creator->id, 'ownership_kind' => 'guardian']);
+        $pet->caretakers()->attach($confirmed->modelKeys(), ['status' => 'accepted']);
+        $pet->caretakers()->attach($pending->id, ['status' => 'pending']);
+
+        $this->getJson('/api/pets/'.$pet->id)->assertOk()
+            ->assertJsonPath('data.owner.id', $creator->id)
+            ->assertJsonCount(2, 'data.caretakers')
+            ->assertJsonFragment(['id' => $confirmed[0]->id, 'name' => $confirmed[0]->name])
+            ->assertJsonFragment(['id' => $confirmed[1]->id, 'name' => $confirmed[1]->name])
+            ->assertJsonMissing(['name' => $pending->name]);
+    }
+
     public function test_creation_sends_invitation_and_pet_appears_only_after_acceptance(): void
     {
         Storage::fake('public');
@@ -24,6 +41,7 @@ class FamilyPetOwnersTest extends TestCase
         $details = Pet::factory()->make()->only(['name', 'species', 'size', 'sex', 'city', 'temperament', 'description']);
         $photo = UploadedFile::fake()->createWithContent('cover.png', base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII='));
         $response = $this->actingAs($creator, 'sanctum')->postJson('/api/profile/pets', [...$details, 'photos' => [$photo], 'owner_ids' => json_encode([$creator->id, $owner->id])])->assertCreated();
+        $response->assertJsonPath('data.caretakers.0.pivot.status', 'pending');
         $id = $response->json('data.id');
         $this->assertDatabaseHas('pet_caretakers', ['pet_id' => $id, 'user_id' => $owner->id, 'status' => 'pending']);
         $this->assertDatabaseMissing('pet_caretakers', ['pet_id' => $id, 'user_id' => $creator->id]);
@@ -56,6 +74,22 @@ class FamilyPetOwnersTest extends TestCase
         $pending = Pet::factory()->create();
         $pending->caretakers()->attach($owner->id, ['status' => 'pending']);
         $this->actingAs($owner, 'sanctum')->getJson('/api/profile/social')->assertOk()->assertJsonPath('stats.pets', 1)->assertJsonCount(1, 'my_pets');
+    }
+
+    public function test_my_pets_dashboard_includes_confirmed_ownership_only(): void
+    {
+        $owner = User::factory()->create();
+        $created = Pet::factory()->create(['owner_id' => $owner->id]);
+        $shared = Pet::factory()->create();
+        $shared->caretakers()->attach($owner->id, ['status' => 'accepted']);
+        $pending = Pet::factory()->create();
+        $pending->caretakers()->attach($owner->id, ['status' => 'pending']);
+        Pet::factory()->create();
+
+        $this->actingAs($owner, 'sanctum')->getJson('/api/dashboards/donor')->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonFragment(['id' => $created->id, 'name' => $created->name])
+            ->assertJsonFragment(['id' => $shared->id, 'name' => $shared->name]);
     }
 
     public function test_invalid_owner_returns_422_without_changing_pet(): void

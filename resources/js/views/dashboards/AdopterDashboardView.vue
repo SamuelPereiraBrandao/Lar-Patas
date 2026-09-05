@@ -1,6 +1,7 @@
 ﻿<script setup>
 import { onMounted, ref } from "vue";
 import PetGallery from "../../components/pets/PetGallery.vue";
+import { notify } from "../../stores/ui";
 
 const interests = ref([]);
 const loading = ref(true);
@@ -20,11 +21,12 @@ async function load() {
 }
 
 async function remove(interest) {
-    await fetch(`/api/adoptions/${interest.id}`, {
+    const response = await fetch(`/api/adoptions/${interest.id}`, {
         method: "DELETE",
         credentials: "same-origin",
         headers: { "X-CSRF-TOKEN": csrf, Accept: "application/json" },
     });
+    if (!response.ok) return notify("Não foi possível remover o interesse. Entre em contato com a equipe.", "error");
     await load();
 }
 
@@ -34,13 +36,15 @@ function peopleLabel(total) {
 function visitsLabel(total) {
     return `${total} ${total === 1 ? "visita prevista" : "visitas previstas"}`;
 }
-function interestStatusLabel(status) {
+function interestStatusLabel(interest) {
+    if (interest.released_at) return "Adoção concluída";
+    if (interest.status === "approved" && interest.pickup_at) return "Aguardando liberação";
     return {
         pending: "Aguardando análise",
         approved: "Aprovada",
         rejected: "Não aprovada",
         cancelled: "Cancelada",
-    }[status] || status;
+    }[interest.status] || interest.status;
 }
 
 onMounted(load);
@@ -74,7 +78,7 @@ onMounted(load);
                 lg="4"
             >
                 <v-card rounded="xl" class="h-100 overflow-hidden">
-                    <PetGallery :species="interest.pet.species" :height="205" />
+                    <PetGallery :species="interest.pet.species" :photos="interest.pet.gallery_urls?.length ? interest.pet.gallery_urls : [interest.pet.image_url].filter(Boolean)" :height="205" />
                     <v-card-item class="pt-5"
                         ><v-card-title>{{ interest.pet.name }}</v-card-title
                         ><v-card-subtitle
@@ -89,7 +93,7 @@ onMounted(load);
                             density="compact"
                             class="mb-3"
                             icon="mdi-heart"
-                            >Seu interesse está marcado</v-alert
+                            >{{ interestStatusLabel(interest) }}</v-alert
                         >
                         <div class="d-flex flex-wrap ga-2">
                             <v-chip
@@ -110,8 +114,16 @@ onMounted(load);
                         </div>
                         <p class="text-caption mt-4">
                             Status da solicitação:
-                            <strong>{{ interestStatusLabel(interest.status) }}</strong>
+                            <strong>{{ interestStatusLabel(interest) }}</strong>
                         </p>
+                        <v-card v-if="interest.pickup_at && !interest.released_at" color="primary" variant="tonal" rounded="lg" class="pa-4 mt-4">
+                            <b><v-icon icon="mdi-calendar-check-outline" size="20" /> Venha buscar {{ interest.pet.name }}</b>
+                            <p class="text-body-2 mt-2">{{ new Date(interest.pickup_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short', timeZone: interest.pickup_timezone || 'America/Sao_Paulo' }) }} ({{ interest.pickup_timezone }})</p>
+                            <p class="text-body-2 mt-2">{{ interest.pickup_location }}</p>
+                            <p class="text-body-2 mt-3" style="white-space: pre-wrap">{{ interest.pickup_message }}</p>
+                            <div v-if="interest.verification_code" class="mt-4"><span class="text-caption">Seu código de verificação</span><div class="text-h4 font-weight-bold" style="letter-spacing: .15em">{{ interest.verification_code }}</div></div>
+                            <p class="text-caption mt-2">Apresente o código à equipe na retirada para concluir a adoção.</p>
+                        </v-card>
                     </v-card-text>
                     <v-card-actions class="pa-4"
                         ><v-btn
@@ -120,6 +132,7 @@ onMounted(load);
                             color="primary"
                             >Ver perfil</v-btn
                         ><v-spacer /><v-btn
+                            v-if="interest.status !== 'approved'"
                             color="error"
                             variant="text"
                             @click="remove(interest)"

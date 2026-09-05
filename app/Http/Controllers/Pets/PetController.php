@@ -33,7 +33,7 @@ class PetController extends Controller
     {
         $userId = $request->user('sanctum')?->id ?? $request->user()?->id;
 
-        $pet = Pet::query()->with(['shelter:id,name,district,city,state', 'owner:id,name,avatar_path,city,state'])->withCount(['adoptions', 'likes'])->withMax('adoptions as latest_interest_at', 'created_at')
+        $pet = Pet::query()->with(['shelter:id,name,district,city,state', 'owner:id,name,avatar_path,city,state', 'caretakers' => fn ($query) => $query->select('users.id', 'users.name', 'users.avatar_path', 'users.city', 'users.state')->wherePivot('status', 'accepted')])->withCount(['adoptions', 'likes'])->withMax('adoptions as latest_interest_at', 'created_at')
             ->when($userId, fn ($query) => $query->withExists([
                 'adoptions as is_interested' => fn ($adoptions) => $adoptions->where('user_id', $userId),
                 'likes as is_liked' => fn ($likes) => $likes->where('user_id', $userId),
@@ -72,6 +72,12 @@ class PetController extends Controller
 
     private function save(StorePetRequest $request, Pet $pet): Pet
     {
-        return $this->photos->save($request, $pet, $request->validated());
+        $data = $request->validated();
+        if ($shelter = Shelter::find($data['shelter_id'] ?? null)) {
+            $data['city'] = $shelter->city;
+            $data['state'] = $shelter->state;
+        }
+
+        return $this->photos->save($request, $pet, $data);
     }
 }

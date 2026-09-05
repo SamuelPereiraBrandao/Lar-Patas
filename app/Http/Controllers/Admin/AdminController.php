@@ -17,7 +17,7 @@ class AdminController extends Controller
     {
         $this->ensureAdmin($request);
 
-        return response()->json(['data' => Pet::with(['owner:id,name,email', 'shelter:id,name,city,state,district', 'adoptions.user:id,name,email'])->withCount('adoptions')->latest()->get()]);
+        return response()->json(['data' => Pet::with(['owner:id,name,email', 'shelter:id,name,address,city,state,district', 'adoptions.user:id,name,email,avatar_path,city,state'])->withCount('adoptions')->latest()->get()]);
     }
 
     public function users(Request $request): JsonResponse

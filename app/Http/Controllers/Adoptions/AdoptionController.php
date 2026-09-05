@@ -7,6 +7,7 @@ use App\Models\Adoption;
 use App\Models\Pet;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class AdoptionController extends Controller
 {
@@ -28,18 +29,28 @@ class AdoptionController extends Controller
     public function destroy(Request $request, Adoption $adoption): JsonResponse
     {
         abort_unless($adoption->user_id === $request->user()->id, 403);
-        $adoption->delete();
+        DB::transaction(function () use ($adoption): void {
+            Pet::lockForUpdate()->findOrFail($adoption->pet_id);
+            $adoption = Adoption::lockForUpdate()->findOrFail($adoption->id);
+            abort_if($adoption->status === 'approved', 409, 'Uma adoção aprovada não pode ser removida. Entre em contato com a equipe.');
+            $adoption->delete();
+        });
 
         return response()->json(status: 204);
     }
 
     public function update(Request $request, Adoption $adoption): JsonResponse
     {
-        $data = $request->validate(['status' => 'required|in:pending,approved,rejected']);
-        $adoption->update($data);
-        if ($data['status'] === 'approved') {
-            $adoption->pet->update(['status' => 'adopted', 'owner_id' => $adoption->user_id, 'ownership_kind' => 'adoption']);
-        }
+        abort_unless($request->user()->hasRole('admin'), 403);
+        $data = $request->validate(['status' => 'required|in:pending,rejected']);
+        $adoption = DB::transaction(function () use ($adoption, $data): Adoption {
+            Pet::lockForUpdate()->findOrFail($adoption->pet_id);
+            $adoption = Adoption::lockForUpdate()->findOrFail($adoption->id);
+            abort_if($adoption->status === 'approved', 409, 'Esta adoção já foi aprovada. Use a confirmação de retirada.');
+            $adoption->update($data);
+
+            return $adoption;
+        });
 
         return response()->json(['data' => $adoption]);
     }

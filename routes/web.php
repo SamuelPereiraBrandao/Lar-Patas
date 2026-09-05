@@ -14,4 +14,5 @@ Route::post('/reset-password', [PasswordResetController::class, 'reset'])->middl
 Route::view('/redefinir-senha/{token}', 'app')->middleware('guest')->name('password.reset');
 Route::get('/auth/user', [AuthController::class, 'user'])->middleware('auth');
 Route::post('/logout', [AuthController::class, 'sessionLogout'])->middleware('auth');
+Route::view('/painel', 'app')->name('adoptions.pickup-page');
 Route::view('/{any?}', 'app')->where('any', '.*');

@@ -13,12 +13,19 @@ class RoleDashboardController extends Controller
 {
     public function receiver(Request $request): JsonResponse
     {
-        return response()->json(['data' => Adoption::with(['pet' => fn ($query) => $query->withCount(['adoptions', 'visits'])])->where('user_id', $request->user()->id)->latest()->get()]);
+        $adoptions = Adoption::with(['pet' => fn ($query) => $query->withCount(['adoptions', 'visits'])])->where('user_id', $request->user()->id)->latest()->get();
+        $adoptions->each(function (Adoption $adoption): void {
+            if ($adoption->status === 'approved' && ! $adoption->released_at) {
+                $adoption->setAttribute('verification_code', $adoption->pickup_code);
+            }
+        });
+
+        return response()->json(['data' => $adoptions]);
     }
 
     public function donor(Request $request): JsonResponse
     {
-        return response()->json(['data' => Pet::with(['adoptions', 'adoptions.pet'])->where('owner_id', $request->user()->id)->orderBy('queue_position')->get()]);
+        return response()->json(['data' => Pet::with(['adoptions', 'adoptions.pet'])->ownedBy($request->user()->id)->orderBy('queue_position')->get()]);
     }
 
     public function admin(): JsonResponse

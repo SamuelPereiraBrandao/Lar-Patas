@@ -8,6 +8,9 @@ import { notify, userAvatar, userName } from "../../stores/ui";
 const props = defineProps({ id: String });
 const route = useRoute();
 const pet = ref(null);
+const confirmedOwners = computed(() => [...new Map(
+    [pet.value?.owner, ...(pet.value?.caretakers || [])].filter(Boolean).map(owner => [owner.id, owner]),
+).values()]);
 const respondingOwner = ref(false);
 const petUnavailable = ref(false);
 async function respondOwner(accept) {
@@ -48,12 +51,16 @@ const shelterLocation = computed(() =>
         : "Sede não informada",
 );
 const backTarget = computed(() =>
-    route.query.from === "profile"
+    route.query.from === "my-pets"
+        ? "/meus-pets"
+        : route.query.from === "profile"
         ? `/perfil/${route.query.profile}`
         : "/pets",
 );
 const backLabel = computed(() =>
-    route.query.from === "profile" ? "Voltar ao perfil" : "Voltar aos pets",
+    route.query.from === "my-pets"
+        ? "Voltar aos meus pets"
+        : route.query.from === "profile" ? "Voltar ao perfil" : "Voltar aos pets",
 );
 const interestedLabel = computed(
     () =>
@@ -228,7 +235,7 @@ onBeforeUnmount(() => realtime?.close());
                         title="Adoção com análise de perfil"
                         subtitle="A ONG entrará em contato para agendar uma visita"
                 /></v-list>
-                <v-menu v-if="pet.ownership_kind === 'guardian' && pet.owner" open-on-hover open-on-click location="bottom start" :close-delay="120" @update:model-value="(open) => open && loadProfileSummary(pet.owner.id)"><template #activator="{ props: menuProps }"><v-card v-bind="menuProps" class="owner-card pa-4 mb-4 cursor-pointer" rounded="lg" variant="tonal" color="primary"><div class="d-flex align-center ga-3"><v-avatar size="42" color="primary"><v-img v-if="pet.owner.avatar_url || pet.owner.avatar_path" :src="pet.owner.avatar_url || `/storage/${pet.owner.avatar_path}`" cover /><span v-else>{{ pet.owner.name?.[0] }}</span></v-avatar><div><div class="text-caption">Dono</div><b>{{ pet.owner.name }}</b></div><v-spacer/><v-icon>mdi-chevron-right</v-icon></div></v-card></template><v-card class="profile-popover pa-3" rounded="xl"><div class="d-flex align-center ga-3"><v-avatar size="42" color="primary"><v-img v-if="pet.owner.avatar_url || pet.owner.avatar_path" :src="pet.owner.avatar_url || `/storage/${pet.owner.avatar_path}`" cover /></v-avatar><div><b>{{ pet.owner.name }}</b><div class="text-caption">{{ profileSummaries[pet.owner.id]?.profile?.city || pet.owner.city }}</div></div></div><div v-if="profileSummaries[pet.owner.id]?.stats" class="text-caption mt-2"><b>{{ profileSummaries[pet.owner.id].stats.adoptions }}</b> adoções · <b>{{ profileSummaries[pet.owner.id].stats.posts }}</b> publicações</div><v-btn :to="pet.is_owner ? '/perfil' : `/perfil/${pet.owner.id}`" block size="small" color="primary" variant="tonal" class="mt-3">{{ pet.is_owner ? 'Meu perfil' : 'Ver perfil' }}</v-btn></v-card></v-menu>
+                <v-menu v-for="owner in (pet.ownership_kind === 'guardian' ? confirmedOwners : [])" :key="owner.id" open-on-hover open-on-click location="bottom start" :close-delay="120" @update:model-value="(open) => open && loadProfileSummary(owner.id)"><template #activator="{ props: menuProps }"><v-card v-bind="menuProps" class="owner-card pa-4 mb-4 cursor-pointer" rounded="lg" variant="tonal" color="primary"><div class="d-flex align-center ga-3"><v-avatar size="42" color="primary"><v-img v-if="owner.avatar_url || owner.avatar_path" :src="owner.avatar_url || `/storage/${owner.avatar_path}`" cover /><span v-else>{{ owner.name?.[0] }}</span></v-avatar><div><div class="text-caption">Dono</div><b>{{ owner.name }}</b></div><v-spacer/><v-icon>mdi-chevron-right</v-icon></div></v-card></template><v-card class="profile-popover pa-3" rounded="xl"><div class="d-flex align-center ga-3"><v-avatar size="42" color="primary"><v-img v-if="owner.avatar_url || owner.avatar_path" :src="owner.avatar_url || `/storage/${owner.avatar_path}`" cover /></v-avatar><div><b>{{ owner.name }}</b><div class="text-caption">{{ profileSummaries[owner.id]?.profile?.city || owner.city }}</div></div></div><div v-if="profileSummaries[owner.id]?.stats" class="text-caption mt-2"><b>{{ profileSummaries[owner.id].stats.adoptions }}</b> adoções · <b>{{ profileSummaries[owner.id].stats.posts }}</b> publicações</div><v-btn :to="`/perfil/${owner.id}`" block size="small" color="primary" variant="tonal" class="mt-3">Ver perfil</v-btn></v-card></v-menu>
                 <v-card
                     v-if="pet.ownership_kind !== 'guardian' && pet.adoptions_count"
                     class="pa-4 mb-4"

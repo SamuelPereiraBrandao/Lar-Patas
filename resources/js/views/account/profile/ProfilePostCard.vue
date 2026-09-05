@@ -115,7 +115,7 @@ async function toggleLike() {
                             >
                         </v-card>
                     </span>
-                    ><v-chip
+                    <v-chip
                         size="x-small"
                         color="primary"
                         variant="tonal"

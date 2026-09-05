@@ -172,7 +172,7 @@ async function toggleLike() {
                                     item.user.name?.[0]
                                 }}</span></v-avatar
                             >
-                            <div>
+                            <div class="comment-content">
                                 <b>{{ item.user.name }}</b
                                 ><small
                                     >{{
@@ -299,7 +299,7 @@ async function toggleLike() {
     border-radius: 12px;
     background: rgba(var(--v-theme-on-surface), 0.05);
 }
-.comment > div {
+.comment-content {
     display: grid;
     gap: 4px;
 }

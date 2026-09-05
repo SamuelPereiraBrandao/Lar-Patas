@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\AdminController;
 use App\Http\Controllers\Adoptions\AdoptionController;
+use App\Http\Controllers\Adoptions\AdoptionPickupController;
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Dashboards\RoleDashboardController;
 use App\Http\Controllers\Locations\LocationController;
@@ -73,4 +74,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('pets', PetController::class)->except(['index', 'show']);
     Route::get('adoptions', [AdoptionController::class, 'index']);
     Route::patch('adoptions/{adoption}', [AdoptionController::class, 'update']);
+    Route::post('adoptions/{adoption}/pickup', [AdoptionPickupController::class, 'store'])->middleware('throttle:10,1');
+    Route::post('adoptions/{adoption}/release', [AdoptionPickupController::class, 'update'])->middleware('throttle:5,1');
 });

@@ -42,10 +42,11 @@ const router = createRouter({
             meta: { requiresAuth: true },
         },
         {
-            path: "/painel/doador",
+            path: "/meus-pets",
             component: DonorDashboardView,
             meta: { requiresAuth: true },
         },
+        { path: "/painel/doador", redirect: "/meus-pets" },
         {
             path: "/perfil",
             component: ProfileView,

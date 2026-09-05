@@ -14,8 +14,6 @@ import ProfileEditDialog from "./profile/ProfileEditDialog.vue";
 import ImageViewerDialog from "./profile/ImageViewerDialog.vue";
 import ProfilePostCard from "./profile/ProfilePostCard.vue";
 import PostComposer from "./profile/PostComposer.vue";
-import PetCard from "../../components/pets/PetCard.vue";
-import OwnedPetDialog from "./profile/OwnedPetDialog.vue";
 
 const props = defineProps({
     userId: { type: [String, Number], default: null },
@@ -63,8 +61,6 @@ const profile = ref(null),
     viewerOpen = ref(false),
     viewerPost = ref(null),
     viewerTitle = ref(""),
-    petDialogOpen = ref(false),
-    editingPet = ref(null),
     petPostFilter = ref(null),
     page = ref(1),
     hasMore = ref(false),
@@ -208,17 +204,6 @@ async function loadMore() {
 function postPublished(post) {
     posts.value.unshift(post);
     stats.value.posts++;
-}
-function petDeleted(id) {
-    adoptedPets.value = adoptedPets.value.filter(pet => pet.id !== id);
-    stats.value.pets = adoptedPets.value.length;
-    if (petPostFilter.value === id) petPostFilter.value = null;
-}
-function petSaved(pet) {
-    const index = adoptedPets.value.findIndex((item) => item.id === pet.id);
-    if (index >= 0) adoptedPets.value.splice(index, 1, pet);
-    else adoptedPets.value.unshift(pet);
-    stats.value.pets = adoptedPets.value.length;
 }
 async function comment(post, value = null) {
     const body = value || commentDrafts[post.id]?.trim();
@@ -375,18 +360,32 @@ onBeforeUnmount(() => { feedObserver?.disconnect(); window.removeEventListener("
                         /></div
                 ></v-col>
                 <v-col cols="12" md="5"
-                    ><v-card rounded="xl" class="mb-5"
-                        ><v-card-title class="d-flex align-center">Pets de {{ profile.name }}<v-spacer /><v-btn v-if="canEdit" size="small" color="primary" variant="tonal" prepend-icon="mdi-plus" @click="editingPet = null; petDialogOpen = true">Adicionar pet</v-btn></v-card-title
-                        ><v-card-text
-                            ><v-row v-if="adoptedPets.length" class="mt-1">
-                                <v-col v-for="pet in adoptedPets" :key="pet.id" cols="12" sm="6" md="12">
-                                    <PetCard :pet="pet" family :editable="canEdit && pet.ownership_kind === 'guardian'" :to="`/pets/${pet.id}?from=profile&profile=${profile.id}`" @edit="editingPet = $event; petDialogOpen = true" />
-                                </v-col>
-                            </v-row>
-                            <span v-else class="text-medium-emphasis"
-                                >Adicione os pets que fazem parte da sua família.</span
-                            ></v-card-text
-                        ></v-card
+                    ><v-card rounded="xl" class="mb-5 profile-pets" elevation="0">
+                        <div class="d-flex align-center ga-3 pa-5 pb-4">
+                            <v-avatar color="primary" variant="tonal" rounded="lg" size="40"><v-icon icon="mdi-paw" /></v-avatar>
+                            <div class="profile-pets-heading"><h2>Companheiros de vida</h2><p>Os pets de {{ profile.name }}</p></div>
+                            <v-spacer />
+                            <v-chip color="primary" variant="tonal" size="small">{{ adoptedPets.length }}</v-chip>
+                        </div>
+                        <div v-if="adoptedPets.length" class="profile-pets-list px-5 pb-5">
+                            <router-link v-for="pet in adoptedPets" :key="pet.id" :to="`/pets/${pet.id}?from=profile&profile=${profile.id}`" class="profile-pet-preview" :aria-label="`Ver perfil de ${pet.name}`">
+                                <v-img v-if="pet.image_url" :src="pet.image_url" :alt="pet.name" width="96" height="110" cover class="profile-pet-photo">
+                                    <template #error><div class="profile-pet-placeholder"><v-icon icon="mdi-paw" /></div></template>
+                                </v-img>
+                                <div v-else class="profile-pet-photo profile-pet-placeholder"><v-icon icon="mdi-paw" size="30" /></div>
+                                <div class="profile-pet-info">
+                                    <h3>{{ pet.name }}</h3>
+                                    <p>{{ pet.species === 'cat' ? 'Gato' : 'Cachorro' }} · {{ pet.sex === 'female' ? 'Fêmea' : 'Macho' }}</p>
+                                    <span v-if="pet.city" class="profile-pet-city"><v-icon icon="mdi-map-marker-outline" size="14" />{{ pet.city }}</span>
+                                    <span class="profile-pet-label">{{ pet.ownership_kind === 'adoption' ? 'Adotado' : 'Pet da família' }}</span>
+                                </div>
+                            </router-link>
+                        </div>
+                        <p v-else class="px-5 pb-5 text-body-2 text-medium-emphasis">Ainda não há pets neste perfil.</p>
+                        <div v-if="canEdit" class="px-5 pb-5">
+                            <v-btn to="/meus-pets" block color="primary" variant="tonal" rounded="lg" prepend-icon="mdi-paw-outline" append-icon="mdi-arrow-right">Meus pets</v-btn>
+                        </div>
+                    </v-card
                     ><v-card rounded="xl"
                         ><v-card-title>Sobre o lar</v-card-title
                         ><v-card-text class="text-medium-emphasis"
@@ -421,7 +420,6 @@ onBeforeUnmount(() => { feedObserver?.disconnect(); window.removeEventListener("
             @saved="saved"
             @notice="say"
         />
-        <OwnedPetDialog v-if="canEdit" v-model="petDialogOpen" :owner-name="profile?.name" :city="profile?.city" :state="profile?.state" :locations="locations" :pet="editingPet" :can-delete="editingPet?.owner_id === profile?.id" @saved="petSaved" @deleted="petDeleted" />
     </v-container>
 </template>
 
@@ -509,6 +507,20 @@ onBeforeUnmount(() => { feedObserver?.disconnect(); window.removeEventListener("
 .avatar-clickable {
     cursor: zoom-in;
 }
+.profile-pets { border: 1px solid rgba(var(--v-theme-on-surface), .08); }
+.profile-pets-heading { min-width: 0; }
+.profile-pets-heading h2 { font-size: 1rem; font-weight: 750; }
+.profile-pets-heading p { font-size: .75rem; margin-top: 3px; color: rgba(var(--v-theme-on-surface), .6); }
+.profile-pets-list { display: grid; gap: 12px; }
+.profile-pet-preview { display: flex; gap: 14px; align-items: center; padding: 10px; border: 1px solid rgba(var(--v-theme-on-surface), .08); border-radius: 18px; color: inherit; text-decoration: none; transition: background .15s, border-color .15s; }
+.profile-pet-preview:hover, .profile-pet-preview:focus-visible { background: rgba(var(--v-theme-primary), .05); border-color: rgb(var(--v-theme-primary)); }
+.profile-pet-photo { flex: 0 0 96px; width: 96px; height: 110px; border-radius: 12px; overflow: hidden; }
+.profile-pet-placeholder { display: grid; place-items: center; height: 110px; background: rgba(var(--v-theme-primary), .08); color: rgb(var(--v-theme-primary)); }
+.profile-pet-info { min-width: 0; }
+.profile-pet-info h3 { font-size: 1.05rem; line-height: 1.25; overflow-wrap: anywhere; }
+.profile-pet-info p, .profile-pet-city { font-size: .72rem; color: rgba(var(--v-theme-on-surface), .6); margin-top: 5px; }
+.profile-pet-city { display: flex; gap: 3px; align-items: center; }
+.profile-pet-label { display: inline-block; font-size: .65rem; font-weight: 600; margin-top: 7px; padding: 3px 8px; border-radius: 20px; color: rgb(var(--v-theme-primary)); background: rgba(var(--v-theme-primary), .08); }
 .avatar-clickable:hover {
     filter: brightness(0.88);
 }

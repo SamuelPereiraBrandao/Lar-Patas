@@ -119,7 +119,9 @@ function goToProfile(item) {
 }
 function openNotification(item) {
     open.value = false;
-    if (item.data?.post_id) {
+    if (item.type === 'adoption_pickup') {
+        router.push('/painel');
+    } else if (item.data?.post_id) {
         router.push({
             path: "/perfil",
             query: {

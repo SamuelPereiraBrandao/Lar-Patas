@@ -104,6 +104,16 @@ const cities = computed(
             .find((location) => location.code === form.state)
             ?.cities.map((city) => city.name) || [],
 );
+const pendingOwners = computed(() => (props.pet?.caretakers || []).filter(
+    owner => owner.pivot?.status === "pending" && form.owner_ids?.includes(owner.id),
+));
+function useShelterLocation() {
+    const shelter = props.shelterOptions.find(shelter => shelter.value === form.shelter_id);
+    if (props.administrative && shelter) {
+        form.city = shelter.city || "";
+        form.state = shelter.state || "";
+    }
+}
 function useOwnerLocation(value) {
     if (value) {
         form.city = props.city || "";
@@ -162,6 +172,7 @@ function reset() {
         shelter_id: pet?.shelter_id || null,
         status: pet?.status || "available",
     });
+    useShelterLocation();
     if (!props.administrative) {
         useOwnerLocation(form.lives_with_owner);
         ownerOptions.value = pet?.caretakers || [];
@@ -239,7 +250,7 @@ async function save() {
             }
             if (
                 props.administrative &&
-                ["state", "lives_with_owner"].includes(key)
+                ["lives_with_owner"].includes(key)
             )
                 return;
             if (!props.administrative && ["shelter_id", "status"].includes(key))
@@ -427,6 +438,9 @@ async function save() {
                                             "
                                     /></template>
                                 </v-autocomplete>
+                                <p v-for="owner in pendingOwners" :key="owner.id" class="text-caption mt-2 text-medium-emphasis">
+                                    Solicitação feita — aguardando confirmação de {{ owner.name }}.
+                                </p>
                             </v-col>
                             <v-col v-if="!administrative" cols="12">
                                 <v-checkbox
@@ -444,21 +458,31 @@ async function save() {
                                     {{ form.state }}
                                 </p>
                             </v-col>
+                            <v-col v-if="administrative" cols="12">
+                                <v-select
+                                    v-model="form.shelter_id"
+                                    :items="[{ title: 'Nenhuma', value: null }, ...shelterOptions]"
+                                    label="Sede"
+                                    @update:model-value="useShelterLocation"
+                                    variant="outlined"
+                                />
+                            </v-col>
                             <v-col
-                                v-if="!administrative && !form.lives_with_owner"
+                                v-if="administrative || !form.lives_with_owner"
                                 cols="12"
                                 md="4"
                             >
                                 <v-select
                                     v-model="form.state"
                                     :items="states"
+                                    :disabled="administrative && !!form.shelter_id"
                                     label="Estado (UF)"
                                     variant="outlined"
                                     @update:model-value="form.city = ''"
                                 />
                             </v-col>
                             <v-col
-                                v-if="!administrative && !form.lives_with_owner"
+                                v-if="administrative || !form.lives_with_owner"
                                 cols="12"
                                 md="8"
                             >
@@ -466,16 +490,11 @@ async function save() {
                                     v-model="form.city"
                                     :items="cities"
                                     label="Cidade"
-                                    :disabled="!form.state"
+                                    :disabled="!form.state || (administrative && !!form.shelter_id)"
                                     variant="outlined"
                                 />
                             </v-col>
-                            <v-col v-if="administrative" cols="12" md="6"
-                                ><v-text-field
-                                    v-model="form.city"
-                                    label="Cidade"
-                                    variant="outlined" /></v-col
-                            ><v-col cols="12" md="6"
+                            <v-col cols="12" md="6"
                                 ><v-select
                                     v-model="form.temperament"
                                     :items="opts"
@@ -483,12 +502,6 @@ async function save() {
                                     multiple
                                     chips
                                     closable-chips
-                                    variant="outlined" /></v-col
-                            ><v-col v-if="administrative" cols="12" md="6"
-                                ><v-select
-                                    v-model="form.shelter_id"
-                                    :items="shelterOptions"
-                                    label="Sede"
                                     variant="outlined" /></v-col
                             ><v-col v-if="administrative" cols="12" md="6"
                                 ><v-select

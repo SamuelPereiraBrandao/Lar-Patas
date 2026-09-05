@@ -116,9 +116,7 @@ function pick(event, type) {
                 </p>
                 <div class="mini-stats">
                     <span
-                        ><b>{{ stats.interests || 0 }}</b> interesses</span
-                    ><span
-                        ><b>{{ stats.adoptions || 0 }}</b> adoções</span
+                        ><b>{{ stats.pets || 0 }}</b> pets que possui</span
                     ><span
                         ><b>{{ stats.posts || 0 }}</b> publicações</span
                     >

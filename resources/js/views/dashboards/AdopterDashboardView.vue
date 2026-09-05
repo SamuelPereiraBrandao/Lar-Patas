@@ -34,6 +34,14 @@ function peopleLabel(total) {
 function visitsLabel(total) {
     return `${total} ${total === 1 ? "visita prevista" : "visitas previstas"}`;
 }
+function interestStatusLabel(status) {
+    return {
+        pending: "Aguardando análise",
+        approved: "Aprovada",
+        rejected: "Não aprovada",
+        cancelled: "Cancelada",
+    }[status] || status;
+}
 
 onMounted(load);
 </script>
@@ -102,7 +110,7 @@ onMounted(load);
                         </div>
                         <p class="text-caption mt-4">
                             Status da solicitação:
-                            <strong>{{ interest.status }}</strong>
+                            <strong>{{ interestStatusLabel(interest.status) }}</strong>
                         </p>
                     </v-card-text>
                     <v-card-actions class="pa-4"

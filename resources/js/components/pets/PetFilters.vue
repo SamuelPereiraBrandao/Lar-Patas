@@ -44,7 +44,11 @@ onMounted(async () => {
             <v-col cols="6" md="2"
                 ><v-select
                     v-model="filters.size"
-                    :items="['Pequeno', 'Médio', 'Grande']"
+                    :items="[
+                        { title: 'Pequeno', value: 'small' },
+                        { title: 'Médio', value: 'medium' },
+                        { title: 'Grande', value: 'large' },
+                    ]"
                     label="Porte"
                     clearable
                     variant="outlined"

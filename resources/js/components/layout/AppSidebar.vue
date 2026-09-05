@@ -81,7 +81,7 @@ onMounted(hydrateUser);
             </div>
         </div>
         <div class="pa-4">
-            <v-card class="profile-card pa-3" rounded="xl" elevation="0"
+            <v-card to="/perfil" class="profile-card pa-3" rounded="xl" elevation="0"
                 ><div class="d-flex align-center ga-3">
                     <v-avatar color="primary" size="44"
                         ><v-img

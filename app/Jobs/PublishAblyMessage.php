@@ -21,6 +21,7 @@ class PublishAblyMessage implements ShouldQueue
     public function __construct(
         public string $channel,
         public array $message,
+        public string $eventName = 'message:created',
     ) {
         $this->onQueue('ably');
     }
@@ -43,7 +44,7 @@ class PublishAblyMessage implements ShouldQueue
 
         $request
             ->post('https://rest.ably.io/channels/'.$this->channel.'/messages', [
-                'name' => 'message:created',
+                'name' => $this->eventName,
                 'data' => $this->message,
             ])
             ->throw();

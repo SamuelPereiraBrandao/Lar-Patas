@@ -1,6 +1,7 @@
 ﻿import { createRouter, createWebHistory } from "vue-router";
 import HomeView from "../views/public/HomeView.vue";
 import PetDetailsView from "../views/pets/PetDetailsView.vue";
+import PetsExploreView from "../views/pets/PetsExploreView.vue";
 import AdoptionFormView from "../views/pets/AdoptionFormView.vue";
 import LoginView from "../views/auth/LoginView.vue";
 import TwoFactorView from "../views/auth/TwoFactorView.vue";
@@ -19,6 +20,7 @@ const router = createRouter({
     history: createWebHistory(),
     routes: [
         { path: "/", component: HomeView },
+        { path: "/pets", component: PetsExploreView },
         { path: "/pets/:id", component: PetDetailsView, props: true },
         {
             path: "/adotar/:id",

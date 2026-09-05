@@ -38,7 +38,7 @@ class AdoptionController extends Controller
         $data = $request->validate(['status' => 'required|in:pending,approved,rejected']);
         $adoption->update($data);
         if ($data['status'] === 'approved') {
-            $adoption->pet->update(['status' => 'adopted']);
+            $adoption->pet->update(['status' => 'adopted', 'owner_id' => $adoption->user_id, 'ownership_kind' => 'adoption']);
         }
 
         return response()->json(['data' => $adoption]);

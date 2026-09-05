@@ -10,6 +10,11 @@ class DirectMessage extends Model
 {
     protected $fillable = ['direct_conversation_id', 'user_id', 'body'];
 
+    protected function casts(): array
+    {
+        return ['read_at' => 'datetime'];
+    }
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);

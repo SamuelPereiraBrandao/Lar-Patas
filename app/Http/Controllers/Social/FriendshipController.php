@@ -8,6 +8,7 @@ use App\Models\FriendRequest;
 use App\Models\User;
 use App\Models\UserNotification;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class FriendshipController extends Controller
 {
@@ -62,7 +63,9 @@ class FriendshipController extends Controller
             ->get(['id', 'name', 'avatar_path', 'city', 'state'])
             ->keyBy('id');
 
-        $data = $items->map(function (UserNotification $notification) use ($friendRequests, $actors) {
+        $petRequests = DB::table('pet_caretakers')->where('user_id', $r->user()->id)->whereIn('pet_id', $items->pluck('data.pet_id')->filter())->pluck('status', 'pet_id');
+
+        $data = $items->map(function (UserNotification $notification) use ($friendRequests, $actors, $petRequests) {
             $request = $friendRequests->get($notification->data['request_id'] ?? null);
 
             return [
@@ -72,6 +75,7 @@ class FriendshipController extends Controller
                     'status' => $request->status,
                     'sender' => $request->sender,
                 ] : null,
+                'pet_request_status' => $petRequests->get($notification->data['pet_id'] ?? null),
                 'actor' => $actors->get($notification->data['sender_id'] ?? null),
             ];
         });

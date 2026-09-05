@@ -2,9 +2,11 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Storage;
 
@@ -12,9 +14,9 @@ class Pet extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['owner_id', 'shelter_id', 'name', 'species', 'breed', 'birth_date', 'size', 'sex', 'city', 'temperament', 'description', 'status', 'queue_position', 'triage_notes', 'image_path', 'gallery_paths'];
+    protected $fillable = ['owner_id', 'ownership_kind', 'shelter_id', 'name', 'species', 'breed', 'birth_date', 'size', 'sex', 'city', 'state', 'lives_with_owner', 'temperament', 'description', 'status', 'queue_position', 'triage_notes', 'image_path', 'gallery_paths'];
 
-    protected $casts = ['birth_date' => 'date', 'gallery_paths' => 'array'];
+    protected $casts = ['birth_date' => 'date', 'gallery_paths' => 'array', 'lives_with_owner' => 'boolean'];
 
     protected $appends = ['image_url', 'gallery_urls', 'age_label'];
 
@@ -26,6 +28,17 @@ class Pet extends Model
     public function owner(): BelongsTo
     {
         return $this->belongsTo(User::class, 'owner_id');
+    }
+
+    public function scopeOwnedBy(Builder $query, int $userId): Builder
+    {
+        return $query->where(fn (Builder $query) => $query->where('owner_id', $userId)
+            ->orWhereHas('caretakers', fn (Builder $owners) => $owners->where('users.id', $userId)->where('pet_caretakers.status', 'accepted')));
+    }
+
+    public function caretakers(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'pet_caretakers')->withPivot('status')->withTimestamps();
     }
 
     public function shelter(): BelongsTo

@@ -1,6 +1,6 @@
 ﻿<script setup>
 import * as Ably from "ably";
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
+import { computed, onBeforeUnmount, reactive, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import PetGallery from "../../components/pets/PetGallery.vue";
 import { notify, userAvatar, userName } from "../../stores/ui";
@@ -8,6 +8,20 @@ import { notify, userAvatar, userName } from "../../stores/ui";
 const props = defineProps({ id: String });
 const route = useRoute();
 const pet = ref(null);
+const respondingOwner = ref(false);
+const petUnavailable = ref(false);
+async function respondOwner(accept) {
+    respondingOwner.value = true;
+    try {
+        const response = await fetch(`/api/profile/pets/${pet.value.id}/owner-request`, { method: "PATCH", credentials: "same-origin", headers, body: JSON.stringify({ accept }) });
+        if (!response.ok) throw new Error();
+        pet.value.has_pending_owner_request = false;
+        window.dispatchEvent(new Event("notifications:read"));
+        window.dispatchEvent(new Event("pets:changed"));
+        notify(accept ? "Convite aceito! O pet agora aparece no seu perfil." : "Convite recusado.");
+    } catch { notify("Não foi possível responder ao convite.", "error"); }
+    finally { respondingOwner.value = false; }
+}
 const messages = ref([]),
     messageDraft = ref(""),
     chatLoading = ref(false),
@@ -16,6 +30,9 @@ const messages = ref([]),
     loadingMoreComments = ref(false);
 const profileSummaries = reactive({});
 let realtime;
+function sizeLabel(size) {
+    return { small: "pequeno", medium: "médio", large: "grande" }[size] || size;
+}
 const csrf =
     document
         .querySelector('meta[name="csrf-token"]')
@@ -29,6 +46,14 @@ const shelterLocation = computed(() =>
     pet.value?.shelter
         ? `${pet.value.shelter.district || pet.value.shelter.city}, ${pet.value.shelter.city} - ${pet.value.shelter.state}`
         : "Sede não informada",
+);
+const backTarget = computed(() =>
+    route.query.from === "profile"
+        ? `/perfil/${route.query.profile}`
+        : "/pets",
+);
+const backLabel = computed(() =>
+    route.query.from === "profile" ? "Voltar ao perfil" : "Voltar aos pets",
 );
 const interestedLabel = computed(
     () =>
@@ -116,22 +141,34 @@ function connectRealtime() {
         }
     });
 }
-onMounted(async () => {
-    pet.value = (await (await fetch(`/api/pets/${props.id}`)).json()).data;
+watch(() => props.id, async (id) => {
+    realtime?.close();
+    pet.value = null;
+    messages.value = [];
+    petUnavailable.value = false;
+    const response = await fetch(`/api/pets/${id}`, { credentials: "same-origin", headers: { Accept: "application/json" } }).catch(() => null);
+    if (id !== props.id) return;
+    if (!response?.ok) { petUnavailable.value = true; return; }
+    pet.value = (await response.json()).data;
     loadConversation();
     connectRealtime();
     if (route.query.interest === "success") {
         notify("Interesse marcado! Você pode acompanhá-lo na sua Visão geral.");
     }
-});
+}, { immediate: true });
 onBeforeUnmount(() => realtime?.close());
 </script>
 
 <template>
     <v-container v-if="pet" class="py-10">
-        <v-btn to="/" variant="text" prepend-icon="mdi-arrow-left"
-            >Voltar aos pets</v-btn
+        <v-btn :to="backTarget" variant="text" prepend-icon="mdi-arrow-left"
+            >{{ backLabel }}</v-btn
         >
+        <v-card v-if="pet.has_pending_owner_request" rounded="xl" color="primary" variant="tonal" class="pa-5 mt-4">
+            <div class="text-h6">Convite para ser dono de {{ pet.name }}</div>
+            <p class="mt-2">Ao aceitar, este pet aparecerá no seu perfil e você poderá editar os dados e as fotos dele.</p>
+            <div class="d-flex flex-wrap ga-2 mt-4"><v-btn color="primary" variant="flat" :disabled="respondingOwner" @click="respondOwner(true)">Aceitar convite</v-btn><v-btn variant="outlined" :disabled="respondingOwner" @click="respondOwner(false)">Recusar</v-btn></div>
+        </v-card>
         <v-row class="mt-3">
             <v-col cols="12" md="7"
                 ><PetGallery
@@ -159,7 +196,7 @@ onBeforeUnmount(() => realtime?.close());
                 ></v-col
             >
             <v-col cols="12" md="5">
-                <v-chip color="success">Disponível para adoção</v-chip
+                <v-chip :color="pet.ownership_kind === 'guardian' ? 'primary' : 'success'">{{ pet.ownership_kind === 'guardian' ? 'Pet de família' : 'Disponível para adoção' }}</v-chip
                 ><v-chip
                     v-if="pet.is_interested"
                     color="secondary"
@@ -170,7 +207,7 @@ onBeforeUnmount(() => realtime?.close());
                 <h1 class="text-h3 font-weight-black mt-4">{{ pet.name }}</h1>
                 <p class="text-h6 text-medium-emphasis">
                     {{ pet.species === "cat" ? "Gato" : "Cachorro" }} ·
-                    {{ pet.age_label }} · Porte {{ pet.size }}
+                    {{ pet.age_label }} · Porte {{ sizeLabel(pet.size) }}
                 </p>
                 <v-divider class="my-6" />
                 <p class="text-body-1">{{ pet.description }}</p>
@@ -186,12 +223,14 @@ onBeforeUnmount(() => realtime?.close());
                         prepend-icon="mdi-paw"
                         :title="pet.temperament"
                         subtitle="Temperamento" /><v-list-item
+                        v-if="pet.ownership_kind !== 'guardian'"
                         prepend-icon="mdi-shield-check"
                         title="Adoção com análise de perfil"
                         subtitle="A ONG entrará em contato para agendar uma visita"
                 /></v-list>
+                <v-menu v-if="pet.ownership_kind === 'guardian' && pet.owner" open-on-hover open-on-click location="bottom start" :close-delay="120" @update:model-value="(open) => open && loadProfileSummary(pet.owner.id)"><template #activator="{ props: menuProps }"><v-card v-bind="menuProps" class="owner-card pa-4 mb-4 cursor-pointer" rounded="lg" variant="tonal" color="primary"><div class="d-flex align-center ga-3"><v-avatar size="42" color="primary"><v-img v-if="pet.owner.avatar_url || pet.owner.avatar_path" :src="pet.owner.avatar_url || `/storage/${pet.owner.avatar_path}`" cover /><span v-else>{{ pet.owner.name?.[0] }}</span></v-avatar><div><div class="text-caption">Dono</div><b>{{ pet.owner.name }}</b></div><v-spacer/><v-icon>mdi-chevron-right</v-icon></div></v-card></template><v-card class="profile-popover pa-3" rounded="xl"><div class="d-flex align-center ga-3"><v-avatar size="42" color="primary"><v-img v-if="pet.owner.avatar_url || pet.owner.avatar_path" :src="pet.owner.avatar_url || `/storage/${pet.owner.avatar_path}`" cover /></v-avatar><div><b>{{ pet.owner.name }}</b><div class="text-caption">{{ profileSummaries[pet.owner.id]?.profile?.city || pet.owner.city }}</div></div></div><div v-if="profileSummaries[pet.owner.id]?.stats" class="text-caption mt-2"><b>{{ profileSummaries[pet.owner.id].stats.adoptions }}</b> adoções · <b>{{ profileSummaries[pet.owner.id].stats.posts }}</b> publicações</div><v-btn :to="pet.is_owner ? '/perfil' : `/perfil/${pet.owner.id}`" block size="small" color="primary" variant="tonal" class="mt-3">{{ pet.is_owner ? 'Meu perfil' : 'Ver perfil' }}</v-btn></v-card></v-menu>
                 <v-card
-                    v-if="pet.adoptions_count"
+                    v-if="pet.ownership_kind !== 'guardian' && pet.adoptions_count"
                     class="pa-4 mb-4"
                     rounded="lg"
                     variant="tonal"
@@ -239,7 +278,7 @@ onBeforeUnmount(() => realtime?.close());
                     >
                 </div>
                 <v-alert
-                    v-if="pet.is_interested"
+                    v-if="pet.ownership_kind !== 'guardian' && pet.is_interested"
                     type="success"
                     variant="tonal"
                     class="mb-4"
@@ -248,7 +287,7 @@ onBeforeUnmount(() => realtime?.close());
                     atualizações, visitas e a fila no seu painel.</v-alert
                 >
                 <v-btn
-                    v-if="pet.is_interested"
+                    v-if="pet.ownership_kind !== 'guardian' && pet.is_interested"
                     to="/painel"
                     color="secondary"
                     size="large"
@@ -257,7 +296,7 @@ onBeforeUnmount(() => realtime?.close());
                     prepend-icon="mdi-heart"
                     >Acompanhar meu interesse</v-btn
                 ><v-btn
-                    v-else
+                    v-else-if="pet.ownership_kind !== 'guardian'"
                     :to="`/adotar/${pet.id}`"
                     color="primary"
                     size="large"
@@ -315,12 +354,20 @@ onBeforeUnmount(() => realtime?.close());
                             @mouseenter="loadProfileSummary(message.user.id)"
                         >
                             <div class="d-flex align-center flex-wrap ga-2">
-                                <div class="author-wrap">
+                                <v-menu
+                                    open-on-hover
+                                    location="bottom start"
+                                    :open-delay="180"
+                                    :close-delay="120"
+                                >
+                                    <template #activator="{ props }">
                                     <a
+                                        v-bind="props"
                                         class="comment-author"
                                         :href="`/perfil/${message.user.id}`"
                                         >{{ message.user.name }}</a
                                     >
+                                    </template>
                                     <v-card
                                         class="profile-popover pa-4"
                                         rounded="xl"
@@ -398,7 +445,7 @@ onBeforeUnmount(() => realtime?.close());
                                             >Ver perfil</v-btn
                                         >
                                     </v-card>
-                                </div>
+                                </v-menu>
                                 <span class="chat-date">{{
                                     new Date(message.created_at).toLocaleString(
                                         "pt-BR",
@@ -473,22 +520,9 @@ onBeforeUnmount(() => realtime?.close());
     color: rgb(var(--v-theme-primary));
     text-decoration: underline;
 }
-.author-wrap {
-    position: relative;
-    display: inline-flex;
-}
 .profile-popover {
     width: 280px;
-    display: none;
-    position: absolute;
-    z-index: 8;
-    top: calc(100% + 8px);
-    left: 0;
     box-shadow: 0 14px 30px rgba(0, 0, 0, 0.28);
-}
-.author-wrap:hover .profile-popover,
-.profile-popover:hover {
-    display: block;
 }
 .chat-date {
     font-size: 0.72rem;

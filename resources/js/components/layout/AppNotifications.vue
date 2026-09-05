@@ -10,6 +10,7 @@ const filter = ref("all");
 const items = ref([]);
 const unread = ref(0);
 const loading = ref(false);
+const respondingPet = ref(null);
 let refreshTimer;
 let realtime;
 const realtimeChannel = ref("");
@@ -116,6 +117,51 @@ function goToProfile(item) {
     open.value = false;
     router.push(`/perfil/${sender.id}`);
 }
+function openNotification(item) {
+    open.value = false;
+    if (item.data?.post_id) {
+        router.push({
+            path: "/perfil",
+            query: {
+                post: String(item.data.post_id),
+                notification: String(item.id),
+            },
+        });
+    } else if (item.data?.pet_id) {
+        router.push(`/pets/${item.data.pet_id}`);
+    } else {
+        goToProfile(item);
+    }
+}
+async function respondPet(item, accept) {
+    respondingPet.value = item.id;
+    try {
+        const response = await fetch(
+            `/api/profile/pets/${item.data.pet_id}/owner-request`,
+            {
+                method: "PATCH",
+                credentials: "same-origin",
+                headers,
+                body: JSON.stringify({ accept }),
+            },
+        );
+        if (!response.ok) throw new Error();
+        await loadNotifications();
+        window.dispatchEvent(new Event("pets:changed"));
+        notify(
+            accept
+                ? "Convite aceito! O pet agora aparece no seu perfil."
+                : "Convite recusado.",
+        );
+    } catch {
+        notify(
+            "Não foi possível responder ao convite. Atualize as notificações e tente novamente.",
+            "error",
+        );
+    } finally {
+        respondingPet.value = null;
+    }
+}
 watch(open, async (value) => {
     if (value) {
         await loadNotifications();
@@ -167,8 +213,9 @@ onBeforeUnmount(() => {
                     <v-btn
                         v-bind="props"
                         icon="mdi-bell"
-                        color="primary"
-                        variant="tonal"
+                        color="surface"
+                        variant="elevated"
+                        class="utility-fab"
                         aria-label="Abrir notificações"
                     />
                 </v-badge>
@@ -232,13 +279,17 @@ onBeforeUnmount(() => {
                     v-for="item in visibleItems"
                     :key="item.id"
                     class="notification-item"
+                    role="link"
+                    tabindex="0"
+                    @click="openNotification(item)"
+                    @keydown.enter.self.prevent="openNotification(item)"
                     :class="{ unread: !item.read_at }"
                 >
                     <v-avatar
                         size="46"
                         color="primary"
                         class="mt-1"
-                        @click="goToProfile(item)"
+                        @click.stop="goToProfile(item)"
                         ><v-img
                             v-if="avatar(item)"
                             :src="avatar(item)"
@@ -254,12 +305,35 @@ onBeforeUnmount(() => {
                         <button
                             type="button"
                             class="notification-link"
-                            @click="goToProfile(item)"
+                            @click.stop="openNotification(item)"
                         >
                             <b>{{ item.title }}</b
                             ><span v-if="item.body">{{ item.body }}</span>
                         </button>
                         <small>{{ formatDate(item.created_at) }}</small>
+                        <div
+                            v-if="
+                                item.type === 'pet_caretaker_request' &&
+                                item.pet_request_status === 'pending'
+                            "
+                            class="d-flex ga-2 mt-2"
+                        >
+                            <v-btn
+                                size="small"
+                                color="primary"
+                                variant="flat"
+                                :disabled="respondingPet !== null"
+                                @click.stop="respondPet(item, true)"
+                                >Aceitar</v-btn
+                            >
+                            <v-btn
+                                size="small"
+                                variant="tonal"
+                                :disabled="respondingPet !== null"
+                                @click.stop="respondPet(item, false)"
+                                >Recusar</v-btn
+                            >
+                        </div>
                         <div
                             v-if="
                                 item.type === 'friend_request' &&
@@ -271,12 +345,12 @@ onBeforeUnmount(() => {
                                 size="small"
                                 color="primary"
                                 variant="flat"
-                                @click="respond(item, 'accepted')"
+                                @click.stop="respond(item, 'accepted')"
                                 >Aceitar</v-btn
                             ><v-btn
                                 size="small"
                                 variant="tonal"
-                                @click="respond(item, 'rejected')"
+                                @click.stop="respond(item, 'rejected')"
                                 >Recusar</v-btn
                             >
                         </div>
@@ -308,6 +382,15 @@ onBeforeUnmount(() => {
 .notifications-activator--in-chat {
     top: 20px;
     right: 68px;
+}
+.utility-fab {
+    color: rgb(var(--v-theme-primary)) !important;
+    border: 1px solid rgba(var(--v-theme-primary), 0.28);
+    box-shadow: 0 5px 16px rgba(5, 38, 34, 0.26) !important;
+}
+.notifications-activator :deep(.v-badge__badge) {
+    border: 2px solid rgb(var(--v-theme-surface));
+    box-shadow: 0 2px 7px rgba(5, 38, 34, 0.32);
 }
 .notifications-panel {
     width: min(420px, calc(100vw - 24px));

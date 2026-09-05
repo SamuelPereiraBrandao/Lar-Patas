@@ -1,5 +1,6 @@
 ﻿<script setup>
 import { computed, ref, watch } from "vue";
+import { isLogged } from "../../../stores/ui";
 const props = defineProps({
     modelValue: Boolean,
     post: Object,
@@ -10,9 +11,22 @@ const props = defineProps({
 const emit = defineEmits(["update:modelValue", "comment", "load-more"]);
 const zoom = ref(1);
 const draft = ref("");
-const index = ref(0);
-const imagePosts = computed(() => props.posts.filter((item) => item.image_url));
-const currentPost = computed(() => imagePosts.value[index.value] || props.post);
+const postIndex = ref(0);
+const photoIndex = ref(0);
+const imagePosts = computed(() =>
+    props.posts.filter((item) => item.id === props.post?.id || item.image_url || item.gallery_urls?.length),
+);
+const currentPost = computed(
+    () => imagePosts.value[postIndex.value] || props.post,
+);
+const currentImages = computed(() =>
+    currentPost.value?.gallery_urls?.length
+        ? currentPost.value.gallery_urls
+        : currentPost.value?.image_url
+          ? [currentPost.value.image_url]
+          : [],
+);
+const currentImage = computed(() => currentImages.value[photoIndex.value]);
 watch(
     () => props.modelValue,
     (open) => {
@@ -21,7 +35,8 @@ watch(
             const found = imagePosts.value.findIndex(
                 (item) => item.id === props.post?.id,
             );
-            index.value = found >= 0 ? found : 0;
+            postIndex.value = found >= 0 ? found : 0;
+            photoIndex.value = 0;
         }
     },
 );
@@ -36,15 +51,39 @@ function avatarUrl(user) {
         (user?.avatar_path ? `/storage/${user.avatar_path}` : null)
     );
 }
-function previous() {
-    index.value =
-        (index.value - 1 + imagePosts.value.length) % imagePosts.value.length;
+function previousPost() {
+    postIndex.value =
+        (postIndex.value - 1 + imagePosts.value.length) % imagePosts.value.length;
+    photoIndex.value = 0;
     zoom.value = 1;
 }
-function next() {
-    if (index.value === imagePosts.value.length - 1) return emit("load-more");
-    index.value += 1;
+function nextPost() {
+    if (postIndex.value === imagePosts.value.length - 1) return emit("load-more");
+    postIndex.value += 1;
+    photoIndex.value = 0;
     zoom.value = 1;
+}
+function previousPhoto() {
+    photoIndex.value =
+        (photoIndex.value - 1 + currentImages.value.length) % currentImages.value.length;
+    zoom.value = 1;
+}
+function nextPhoto() {
+    photoIndex.value = (photoIndex.value + 1) % currentImages.value.length;
+    zoom.value = 1;
+}
+async function toggleLike() {
+    if (!isLogged.value || !currentPost.value?.id) return;
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute("content") || "";
+    const response = await fetch(`/api/profile/posts/${currentPost.value.id}/likes`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { Accept: "application/json", "X-CSRF-TOKEN": csrf },
+    });
+    if (!response.ok) return;
+    const data = await response.json();
+    currentPost.value.is_liked = data.liked;
+    currentPost.value.likes_count = data.likes_count;
 }
 </script>
 <template>
@@ -53,27 +92,28 @@ function next() {
         max-width="1100"
         @update:model-value="emit('update:modelValue', $event)"
     >
-        <v-card rounded="xl"
+        <div class="viewer-shell"><v-btn v-if="imagePosts.length > 1" class="post-arrow post-previous" icon="mdi-chevron-left" @click="previousPost" /><v-card rounded="xl"
             ><v-row no-gutters class="viewer-row">
-                <v-col cols="12" md="7" class="image-pane"
+                <v-col v-if="currentImages.length" cols="12" md="7" class="image-pane"
                     ><v-img
                         v-if="currentPost"
-                        :src="currentPost.image_url"
+                        :src="currentImage"
                         cover
                         :style="{ transform: `scale(${zoom})` }"
                     />
                     <v-btn
-                        v-if="imagePosts.length > 1"
-                        class="carousel-arrow previous"
+                        v-if="currentImages.length > 1"
+                        class="carousel-arrow photo-previous"
                         icon="mdi-chevron-left"
-                        @click="previous"
+                        @click="previousPhoto"
                     />
                     <v-btn
-                        v-if="imagePosts.length > 1"
-                        class="carousel-arrow next"
+                        v-if="currentImages.length > 1"
+                        class="carousel-arrow photo-next"
                         icon="mdi-chevron-right"
-                        @click="next"
+                        @click="nextPhoto"
                     />
+                    <div v-if="currentImages.length > 1" class="photo-counter">Foto {{ photoIndex + 1 }} de {{ currentImages.length }}</div>
                     <div class="zoom-bar">
                         <v-icon>mdi-magnify-minus</v-icon
                         ><v-slider
@@ -86,7 +126,7 @@ function next() {
                         /><v-icon>mdi-magnify-plus</v-icon>
                     </div></v-col
                 >
-                <v-col cols="12" md="5" class="comments-pane"
+                <v-col cols="12" :md="currentImages.length ? 5 : 12" class="comments-pane"
                     ><div class="d-flex align-center ga-3 mb-4">
                         <v-avatar size="40" color="primary"
                             ><v-img
@@ -109,6 +149,7 @@ function next() {
                     <p v-if="currentPost?.body" class="post-text">
                         {{ currentPost.body }}
                     </p>
+                    <v-btn v-if="isLogged" size="small" variant="tonal" :color="currentPost?.is_liked ? 'error' : 'primary'" :prepend-icon="currentPost?.is_liked ? 'mdi-heart' : 'mdi-heart-outline'" @click="toggleLike">{{ currentPost?.likes_count || 0 }} {{ currentPost?.likes_count === 1 ? 'curtida' : 'curtidas' }}</v-btn>
                     <v-divider class="my-4" />
                     <div class="comments-list">
                         <p
@@ -167,7 +208,7 @@ function next() {
                             @click="submit"
                         /></div
                 ></v-col> </v-row
-        ></v-card>
+        ></v-card><v-btn v-if="imagePosts.length > 1" class="post-arrow post-next" icon="mdi-chevron-right" @click="nextPost" /></div>
     </v-dialog>
 </template>
 <style scoped>
@@ -211,12 +252,13 @@ function next() {
     transform: translateY(-50%);
     background: rgba(var(--v-theme-surface), 0.88);
 }
-.previous {
+.photo-previous {
     left: 28px;
 }
-.next {
+.photo-next {
     right: 28px;
 }
+.photo-counter { position: absolute; top: 28px; left: 50%; transform: translateX(-50%); z-index: 2; padding: 6px 11px; border-radius: 999px; color: rgb(var(--v-theme-on-primary)); background: rgba(0, 0, 0, .55); font-size: .75rem; font-weight: 700; }.viewer-shell { position: relative; }.post-arrow { position: absolute; top: 50%; z-index: 3; transform: translateY(-50%); background: rgb(var(--v-theme-surface)); box-shadow: 0 8px 22px rgba(0, 0, 0, .22); }.post-previous { left: -26px; }.post-next { right: -26px; }
 .zoom-bar {
     position: absolute;
     left: 18px;
@@ -294,5 +336,6 @@ function next() {
         height: auto;
         min-height: 380px;
     }
+    .post-previous { left: 8px; }.post-next { right: 8px; }
 }
 </style>

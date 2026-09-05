@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Social;
 
 use App\Http\Controllers\Controller;
 use App\Jobs\PublishAblyDirectMessage;
+use App\Jobs\PublishAblyMessageLike;
 use App\Jobs\PublishAblyMessageNotification;
+use App\Jobs\PublishAblyMessageRead;
 use App\Models\DirectConversation;
 use App\Models\DirectMessage;
 use App\Models\FriendRequest;
@@ -38,6 +40,8 @@ class DirectMessageController extends Controller
     public function messages(Request $request, DirectConversation $conversation): JsonResponse
     {
         $this->authorizeParticipant($request, $conversation);
+        $this->markMessagesAsRead($conversation, $request->user()->id);
+
         $messages = $conversation->messages()->with('user:id,name,avatar_path')->latest()->paginate(10);
 
         return response()->json([
@@ -49,6 +53,15 @@ class DirectMessageController extends Controller
                 'current_page' => $messages->currentPage(),
                 'has_more' => $messages->hasMorePages(),
             ],
+        ]);
+    }
+
+    public function read(Request $request, DirectConversation $conversation): JsonResponse
+    {
+        $this->authorizeParticipant($request, $conversation);
+
+        return response()->json([
+            'data' => $this->markMessagesAsRead($conversation, $request->user()->id),
         ]);
     }
 
@@ -88,9 +101,12 @@ class DirectMessageController extends Controller
             $message->likes()->create(['user_id' => $request->user()->id]);
         }
 
+        $likesCount = $message->likes()->count();
+        PublishAblyMessageLike::dispatch($message->direct_conversation_id, $message->id, $likesCount);
+
         return response()->json([
             'liked' => ! $like,
-            'likes_count' => $message->likes()->count(),
+            'likes_count' => $likesCount,
         ]);
     }
 
@@ -111,6 +127,23 @@ class DirectMessageController extends Controller
     private function authorizeParticipant(Request $request, DirectConversation $conversation): void
     {
         abort_unless(in_array($request->user()->id, [$conversation->user_one_id, $conversation->user_two_id], true), 403);
+    }
+
+    /** @return array<int, int> */
+    private function markMessagesAsRead(DirectConversation $conversation, int $userId): array
+    {
+        $readMessageIds = $conversation->messages()
+            ->where('user_id', '!=', $userId)
+            ->whereNull('read_at')
+            ->pluck('id')
+            ->all();
+
+        if ($readMessageIds) {
+            $conversation->messages()->whereIn('id', $readMessageIds)->update(['read_at' => now()]);
+            PublishAblyMessageRead::dispatch($conversation->id, $readMessageIds);
+        }
+
+        return $readMessageIds;
     }
 
     /** @return array<string, mixed> */

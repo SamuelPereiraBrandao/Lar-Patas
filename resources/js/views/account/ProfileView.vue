@@ -6,28 +6,66 @@ import {
     onMounted,
     reactive,
     ref,
+    watch,
 } from "vue";
+import { useRoute } from "vue-router";
 import { notify, openChat, setSession } from "../../stores/ui";
 import ProfileEditDialog from "./profile/ProfileEditDialog.vue";
 import ImageViewerDialog from "./profile/ImageViewerDialog.vue";
 import ProfilePostCard from "./profile/ProfilePostCard.vue";
+import PostComposer from "./profile/PostComposer.vue";
+import PetCard from "../../components/pets/PetCard.vue";
+import OwnedPetDialog from "./profile/OwnedPetDialog.vue";
 
 const props = defineProps({
     userId: { type: [String, Number], default: null },
 });
+const route = useRoute();
+const friendshipId = ref(null), respondingFriend = ref(false);
+const viewerPosts = computed(() => viewerPost.value && !posts.value.some(post => post.id === viewerPost.value.id) ? [viewerPost.value, ...posts.value] : posts.value);
+let postRequestVersion = 0;
+async function openNotifiedPost() {
+    const id = route.query.post;
+    const version = ++postRequestVersion;
+    if (!id) return;
+    try {
+        const response = await fetch(`/api/profile/posts/${encodeURIComponent(id)}`, { credentials: "same-origin", headers: { Accept: "application/json" } });
+        if (!response.ok) throw new Error();
+        const result = await response.json();
+        if (version !== postRequestVersion) return;
+        viewerOpen.value = false;
+        viewerPost.value = result.data;
+        await nextTick();
+        viewerOpen.value = true;
+    } catch {
+        if (version === postRequestVersion) notify("Esta postagem não está mais disponível.", "error");
+    }
+}
+watch(() => [route.query.post, route.query.notification], openNotifiedPost);
+async function respondFriend(status) {
+    respondingFriend.value = true;
+    try {
+        const response = await fetch(`/api/friend-requests/${friendshipId.value}`, { method: "PATCH", credentials: "same-origin", headers: jsonHeaders, body: JSON.stringify({ status }) });
+        if (!response.ok) throw new Error();
+        await load();
+        window.dispatchEvent(new Event("notifications:read"));
+        notify(status === "accepted" ? "Solicitação aceita." : "Solicitação recusada.");
+    } catch { notify("Não foi possível responder à solicitação.", "error"); }
+    finally { respondingFriend.value = false; }
+}
 
 const profile = ref(null),
     posts = ref([]),
     adoptedPets = ref([]),
-    stats = ref({ interests: 0, adoptions: 0, posts: 0 }),
+    stats = ref({ pets: 0, posts: 0 }),
     locations = ref([]),
     editOpen = ref(false),
     viewerOpen = ref(false),
     viewerPost = ref(null),
     viewerTitle = ref(""),
-    posting = ref(false),
-    postFile = ref(null),
-    postImageName = ref(""),
+    petDialogOpen = ref(false),
+    editingPet = ref(null),
+    petPostFilter = ref(null),
     page = ref(1),
     hasMore = ref(false),
     loadingMore = ref(false),
@@ -36,8 +74,12 @@ const profile = ref(null),
     friendshipStatus = ref(null),
     feedEnd = ref(null);
 let feedObserver;
-const newPost = reactive({ body: "", pet_id: null });
 const commentDrafts = reactive({});
+const filteredPosts = computed(() =>
+    petPostFilter.value
+        ? posts.value.filter((post) => post.pet_id === petPostFilter.value)
+        : posts.value,
+);
 const csrf =
     document
         .querySelector('meta[name="csrf-token"]')
@@ -117,12 +159,6 @@ async function cancelFriendRequest() {
         notify("Solicitação de amizade cancelada.");
     }
 }
-function filePicked(value) {
-    postFile.value = Array.isArray(value)
-        ? value[0]
-        : value?.target?.files?.[0] || value || null;
-    postImageName.value = postFile.value?.name || "";
-}
 async function load() {
     const socialUrl = props.userId
         ? `/api/users/${props.userId}/profile?page=1`
@@ -147,6 +183,7 @@ async function load() {
     stats.value = data.stats;
     canEdit.value = data.is_owner ?? !props.userId;
     friendshipStatus.value = data.friendship_status;
+    friendshipId.value = data.friendship_id;
     friendRequestSent.value = friendshipStatus.value === "sent";
     if (location.ok) locations.value = (await location.json()).data;
 }
@@ -168,34 +205,20 @@ async function loadMore() {
     }
     loadingMore.value = false;
 }
-async function publish() {
-    posting.value = true;
-    try {
-        const body = new FormData();
-        body.append("body", newPost.body);
-        if (newPost.pet_id) body.append("pet_id", newPost.pet_id);
-        if (postFile.value) body.append("image", postFile.value);
-        const response = await fetch("/api/profile/posts", {
-            method: "POST",
-            credentials: "same-origin",
-            headers: formHeaders,
-            body,
-        });
-        const data = await response.json();
-        if (!response.ok)
-            throw new Error(data.message || "Não foi possível publicar.");
-        posts.value.unshift(data.post);
-        stats.value.posts++;
-        newPost.body = "";
-        newPost.pet_id = null;
-        postFile.value = null;
-        postImageName.value = "";
-        say("Publicação criada.");
-    } catch (error) {
-        say(error.message);
-    } finally {
-        posting.value = false;
-    }
+function postPublished(post) {
+    posts.value.unshift(post);
+    stats.value.posts++;
+}
+function petDeleted(id) {
+    adoptedPets.value = adoptedPets.value.filter(pet => pet.id !== id);
+    stats.value.pets = adoptedPets.value.length;
+    if (petPostFilter.value === id) petPostFilter.value = null;
+}
+function petSaved(pet) {
+    const index = adoptedPets.value.findIndex((item) => item.id === pet.id);
+    if (index >= 0) adoptedPets.value.splice(index, 1, pet);
+    else adoptedPets.value.unshift(pet);
+    stats.value.pets = adoptedPets.value.length;
 }
 async function comment(post, value = null) {
     const body = value || commentDrafts[post.id]?.trim();
@@ -217,8 +240,10 @@ function saved(user) {
     load();
 }
 onMounted(async () => {
+    window.addEventListener("pets:changed", load);
     await load();
     await nextTick();
+    await openNotifiedPost();
     feedObserver = new IntersectionObserver(
         ([entry]) => {
             if (entry.isIntersecting) loadMore();
@@ -227,7 +252,7 @@ onMounted(async () => {
     );
     if (feedEnd.value) feedObserver.observe(feedEnd.value);
 });
-onBeforeUnmount(() => feedObserver?.disconnect());
+onBeforeUnmount(() => { feedObserver?.disconnect(); window.removeEventListener("pets:changed", load); });
 </script>
 
 <template>
@@ -283,6 +308,10 @@ onBeforeUnmount(() => feedObserver?.disconnect());
                             @click="openChat(profile)"
                             >Mensagem</v-btn
                         >
+                        <div v-else-if="friendshipStatus === 'received'" class="d-flex ga-2">
+                            <v-btn color="primary" :disabled="respondingFriend" @click="respondFriend('accepted')">Aceitar amizade</v-btn>
+                            <v-btn variant="tonal" :disabled="respondingFriend" @click="respondFriend('rejected')">Recusar</v-btn>
+                        </div>
                         <v-btn
                             v-else
                             :color="friendActionColor"
@@ -306,14 +335,7 @@ onBeforeUnmount(() => feedObserver?.disconnect());
                         {{ profile.household_description }}
                     </p>
                     <div class="stats">
-                        <div>
-                            <b>{{ stats.interests }}</b
-                            ><span>interesses</span>
-                        </div>
-                        <div>
-                            <b>{{ stats.adoptions }}</b
-                            ><span>adoções</span>
-                        </div>
+                        <div><b>{{ stats.pets }}</b><span>pets que possui</span></div>
                         <div>
                             <b>{{ stats.posts }}</b
                             ><span>publicações</span>
@@ -323,57 +345,10 @@ onBeforeUnmount(() => feedObserver?.disconnect());
             </section>
             <v-row
                 ><v-col cols="12" md="7"
-                    ><v-card v-if="canEdit" rounded="xl" class="mb-5"
-                        ><v-card-text class="pa-5"
-                            ><b>Compartilhe uma novidade</b
-                            ><v-textarea
-                                v-model="newPost.body"
-                                class="mt-3"
-                                hide-details
-                                variant="outlined"
-                                label="Como está a vida por aí?"
-                                rows="3"
-                                auto-grow
-                            />
-                            <div
-                                class="d-flex flex-wrap align-center ga-3 mt-4"
-                            >
-                                <v-select
-                                    v-model="newPost.pet_id"
-                                    :items="adoptedPets"
-                                    item-title="name"
-                                    item-value="id"
-                                    label="Mencionar pet adotado"
-                                    variant="outlined"
-                                    density="compact"
-                                    hide-details
-                                    style="min-width: 210px; max-width: 280px"
-                                    clearable
-                                /><v-btn
-                                    variant="tonal"
-                                    color="primary"
-                                    prepend-icon="mdi-image"
-                                    @click="$refs.postImage.click()"
-                                    >{{
-                                        postImageName || "Adicionar foto"
-                                    }}</v-btn
-                                ><input
-                                    ref="postImage"
-                                    class="d-none"
-                                    type="file"
-                                    accept="image/jpeg,image/png,image/webp"
-                                    @change="filePicked"
-                                /><v-spacer /><v-btn
-                                    color="primary"
-                                    :loading="posting"
-                                    @click="publish"
-                                    >Publicar</v-btn
-                                >
-                            </div></v-card-text
-                        ></v-card
-                    >
+                    ><PostComposer v-if="canEdit" class="mb-5" :author="profile" :pets="adoptedPets" @published="postPublished" />
+                    <v-select v-if="adoptedPets.length" v-model="petPostFilter" :items="adoptedPets" item-title="name" item-value="id" label="Filtrar publicações por pet" clearable density="compact" variant="outlined" class="mb-4" />
                     <ProfilePostCard
-                        v-for="post in posts"
+                        v-for="post in filteredPosts"
                         :key="post.id"
                         :post="post"
                         :author="profile"
@@ -401,24 +376,15 @@ onBeforeUnmount(() => feedObserver?.disconnect());
                 ></v-col>
                 <v-col cols="12" md="5"
                     ><v-card rounded="xl" class="mb-5"
-                        ><v-card-title
-                            >Pets que fazem parte da história</v-card-title
+                        ><v-card-title class="d-flex align-center">Pets de {{ profile.name }}<v-spacer /><v-btn v-if="canEdit" size="small" color="primary" variant="tonal" prepend-icon="mdi-plus" @click="editingPet = null; petDialogOpen = true">Adicionar pet</v-btn></v-card-title
                         ><v-card-text
-                            ><div v-if="adoptedPets.length" class="d-grid ga-3">
-                                <div
-                                    v-for="pet in adoptedPets"
-                                    :key="pet.id"
-                                    class="d-flex align-center ga-3"
-                                >
-                                    <v-avatar size="52" rounded="lg"
-                                        ><v-img
-                                            :src="pet.image_url" /></v-avatar
-                                    ><b>{{ pet.name }}</b>
-                                </div>
-                            </div>
+                            ><v-row v-if="adoptedPets.length" class="mt-1">
+                                <v-col v-for="pet in adoptedPets" :key="pet.id" cols="12" sm="6" md="12">
+                                    <PetCard :pet="pet" family :editable="canEdit && pet.ownership_kind === 'guardian'" :to="`/pets/${pet.id}?from=profile&profile=${profile.id}`" @edit="editingPet = $event; petDialogOpen = true" />
+                                </v-col>
+                            </v-row>
                             <span v-else class="text-medium-emphasis"
-                                >Pets adotados aparecerão aqui para serem
-                                marcados nas publicações.</span
+                                >Adicione os pets que fazem parte da sua família.</span
                             ></v-card-text
                         ></v-card
                     ><v-card rounded="xl"
@@ -440,7 +406,7 @@ onBeforeUnmount(() => feedObserver?.disconnect());
         <ImageViewerDialog
             v-model="viewerOpen"
             :post="viewerPost"
-            :posts="posts"
+            :posts="viewerPosts"
             :author="profile"
             :title="viewerTitle"
             @comment="comment"
@@ -455,6 +421,7 @@ onBeforeUnmount(() => feedObserver?.disconnect());
             @saved="saved"
             @notice="say"
         />
+        <OwnedPetDialog v-if="canEdit" v-model="petDialogOpen" :owner-name="profile?.name" :city="profile?.city" :state="profile?.state" :locations="locations" :pet="editingPet" :can-delete="editingPet?.owner_id === profile?.id" @saved="petSaved" @deleted="petDeleted" />
     </v-container>
 </template>
 

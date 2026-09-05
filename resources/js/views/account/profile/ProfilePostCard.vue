@@ -28,6 +28,18 @@ async function loadSummary(userId) {
     });
     if (response.ok) summaries[userId] = await response.json();
 }
+async function toggleLike() {
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute("content") || "";
+    const response = await fetch(`/api/profile/posts/${props.post.id}/likes`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { Accept: "application/json", "X-CSRF-TOKEN": csrf },
+    });
+    if (!response.ok) return;
+    const data = await response.json();
+    props.post.is_liked = data.liked;
+    props.post.likes_count = data.likes_count;
+}
 </script>
 <template>
     <v-card rounded="xl" class="mb-5 post-card"
@@ -132,13 +144,23 @@ async function loadSummary(userId) {
                 class="mb-4"
                 prepend-icon="mdi-paw"
                 >Com {{ post.pet.name }}</v-chip
-            ><v-img
-                v-if="post.image_url"
-                :src="post.image_url"
-                class="post-image mb-4"
+            ><v-carousel
+                v-if="post.gallery_urls?.length"
+                class="post-gallery mb-4"
                 height="340"
-                cover
-                @click="emit('view', post)" />
+                hide-delimiter-background
+                :show-arrows="post.gallery_urls.length > 1 ? 'hover' : false"
+            ><v-carousel-item v-for="image in post.gallery_urls" :key="image" :src="image" cover @click="emit('view', post)" /></v-carousel>
+            <div class="post-actions mb-3">
+                <v-btn
+                    size="small"
+                    variant="text"
+                    :color="post.is_liked ? 'error' : undefined"
+                    :prepend-icon="post.is_liked ? 'mdi-heart' : 'mdi-heart-outline'"
+                    @click="toggleLike"
+                    >{{ post.likes_count || 0 }} {{ post.likes_count === 1 ? "curtida" : "curtidas" }}</v-btn
+                >
+            </div>
             <div class="comments">
                 <div v-for="item in comments" :key="item.id" class="comment">
                     <v-avatar size="32" color="primary"
@@ -307,10 +329,8 @@ async function loadSummary(userId) {
 .post-body {
     white-space: pre-wrap;
 }
-.post-image {
-    cursor: zoom-in;
-    border-radius: 14px;
-}
+.post-gallery { cursor: zoom-in; border-radius: 14px; overflow: hidden; }
+.post-actions { border-top: 1px solid rgba(var(--v-theme-on-surface), 0.08); padding-top: 8px; }
 .comments {
     display: grid;
     gap: 7px;

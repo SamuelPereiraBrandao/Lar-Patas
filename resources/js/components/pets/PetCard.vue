@@ -2,7 +2,14 @@
 import { computed } from "vue";
 import { useRouter } from "vue-router";
 
-const props = defineProps({ pet: { type: Object, required: true } });
+const props = defineProps({
+    pet: { type: Object, required: true },
+    family: Boolean,
+    editable: Boolean,
+    to: String,
+});
+const emit = defineEmits(["edit"]);
+const destination = computed(() => props.to || `/pets/${props.pet.id}`);
 const router = useRouter();
 const image = computed(
     () =>
@@ -20,6 +27,15 @@ const sizeLabel = computed(
             props.pet.size
         ] || props.pet.size,
 );
+const publishedAt = computed(() => {
+    if (!props.pet.created_at) return "Data não informada";
+
+    return new Intl.DateTimeFormat("pt-BR", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+    }).format(new Date(props.pet.created_at));
+});
 </script>
 
 <template>
@@ -27,7 +43,7 @@ const sizeLabel = computed(
         class="pet-card h-100 cursor-pointer"
         rounded="xl"
         elevation="0"
-        @click="router.push(`/pets/${pet.id}`)"
+        @click="router.push(destination)"
     >
         <v-img :src="image" class="pet-image" height="245" cover>
             <div class="d-flex justify-space-between pa-3">
@@ -59,11 +75,25 @@ const sizeLabel = computed(
                     <div class="pet-meta mt-1">
                         <v-icon size="16" icon="mdi-cake-variant-outline" />{{
                             pet.age_label
-                        }}<span class="mx-1">â€¢</span>Porte {{ sizeLabel }}
+                        }}<span class="mx-1">&bull;</span>
+                        <v-icon size="16" icon="mdi-ruler-square" />Porte
+                        {{ sizeLabel }}
                     </div>
                 </div>
                 <v-chip
-                    v-if="pet.is_interested"
+                    v-if="family"
+                    class="pet-status"
+                    color="primary"
+                    size="small"
+                    variant="tonal"
+                    >{{
+                        pet.ownership_kind === "adoption"
+                            ? "Adotado"
+                            : "Pet da família"
+                    }}</v-chip
+                >
+                <v-chip
+                    v-else-if="pet.is_interested"
                     class="pet-status"
                     color="secondary"
                     size="small"
@@ -81,10 +111,19 @@ const sizeLabel = computed(
                 >
             </div>
             <div class="pet-meta mt-4">
-                <v-icon size="17" icon="mdi-map-marker-outline" />{{ pet.city }}
+                <v-icon size="17" icon="mdi-map-marker-outline" />{{ pet.city
+                }}{{ family && pet.state ? `, ${pet.state}` : "" }}
+            </div>
+            <div v-if="!family" class="pet-meta mt-2">
+                <v-icon size="17" icon="mdi-home-city-outline" />
+                {{ pet.shelter?.name || "Sede não informada" }}
+            </div>
+            <div v-if="!family" class="pet-meta mt-2">
+                <v-icon size="16" icon="mdi-calendar-clock-outline" />
+                Publicado em {{ publishedAt }}
             </div>
             <v-chip
-                v-if="pet.adoptions_count"
+                v-if="!family && pet.adoptions_count"
                 class="mt-3"
                 color="secondary"
                 size="small"
@@ -99,7 +138,30 @@ const sizeLabel = computed(
                 }}
             </v-chip>
         </v-card-item>
-        <v-card-actions class="px-4 pb-4 pt-2">
+        <v-card-actions v-if="family" class="px-4 pb-4 pt-2 ga-2">
+            <v-btn
+                :to="destination"
+                color="primary"
+                variant="flat"
+                rounded="lg"
+                size="large"
+                class="flex-grow-1"
+                @click.stop
+            >
+                Ver pet<v-icon end icon="mdi-arrow-right" />
+            </v-btn>
+            <v-btn
+                v-if="editable"
+                icon="mdi-cog-outline"
+                color="primary"
+                variant="tonal"
+                rounded="lg"
+                :title="`Configurar ${pet.name}`"
+                :aria-label="`Configurar ${pet.name}`"
+                @click.stop="emit('edit', pet)"
+            />
+        </v-card-actions>
+        <v-card-actions v-else class="px-4 pb-4 pt-2">
             <v-btn
                 :to="pet.is_interested ? '/painel' : `/pets/${pet.id}`"
                 :color="pet.is_interested ? 'secondary' : 'primary'"

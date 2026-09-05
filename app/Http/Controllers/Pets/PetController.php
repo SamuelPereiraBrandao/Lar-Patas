@@ -3,25 +3,28 @@
 namespace App\Http\Controllers\Pets;
 
 use App\Http\Controllers\Controller;
+use App\Http\PetPhotoUpdater;
 use App\Http\Requests\StorePetRequest;
 use App\Models\Pet;
 use App\Models\Shelter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Validation\ValidationException;
 
 class PetController extends Controller
 {
+    public function __construct(private PetPhotoUpdater $photos) {}
+
     public function index(Request $request): JsonResponse
     {
         $userId = $request->user('sanctum')?->id ?? $request->user()?->id;
 
-        $pets = Pet::query()->with('shelter:id,name,district,city,state')->withCount('adoptions')->withMax('adoptions as latest_interest_at', 'created_at')->when($userId, fn ($query) => $query->withExists([
+        $pets = Pet::query()->where('ownership_kind', '!=', 'guardian')->with('shelter:id,name,district,city,state')->withCount('adoptions')->withMax('adoptions as latest_interest_at', 'created_at')->when($userId, fn ($query) => $query->withExists([
             'adoptions as is_interested' => fn ($adoptions) => $adoptions->where('user_id', $userId),
         ]))->when($request->search, fn ($q, $s) => $q->where(fn ($q) => $q->where('name', 'like', "%{$s}%")->orWhere('city', 'like', "%{$s}%")))->when($request->species, fn ($q, $s) => $q->where('species', match (strtolower($s)) {
             'cachorro' => 'dog','gato' => 'cat',default => strtolower($s)
-        }))->when($request->size, fn ($q, $s) => $q->where('size', strtolower($s)))->when($request->shelter, fn ($q, $s) => $q->where('shelter_id', $s))->latest()->paginate(12);
+        }))->when($request->size, fn ($q, $s) => $q->where('size', match (strtolower($s)) {
+            'pequeno' => 'small', 'médio', 'medio' => 'medium', 'grande' => 'large', default => strtolower($s),
+        }))->when($request->shelter, fn ($q, $s) => $q->where('shelter_id', $s))->latest()->paginate(12);
 
         return response()->json($pets);
     }
@@ -30,12 +33,14 @@ class PetController extends Controller
     {
         $userId = $request->user('sanctum')?->id ?? $request->user()?->id;
 
-        $pet = Pet::query()->with('shelter:id,name,district,city,state')->withCount(['adoptions', 'likes'])->withMax('adoptions as latest_interest_at', 'created_at')
+        $pet = Pet::query()->with(['shelter:id,name,district,city,state', 'owner:id,name,avatar_path,city,state'])->withCount(['adoptions', 'likes'])->withMax('adoptions as latest_interest_at', 'created_at')
             ->when($userId, fn ($query) => $query->withExists([
                 'adoptions as is_interested' => fn ($adoptions) => $adoptions->where('user_id', $userId),
                 'likes as is_liked' => fn ($likes) => $likes->where('user_id', $userId),
             ]))
             ->findOrFail($pet->id);
+        $pet->setAttribute('is_owner', $userId && $pet->owner_id === $userId);
+        $pet->setAttribute('has_pending_owner_request', $userId && $pet->caretakers()->where('users.id', $userId)->wherePivot('status', 'pending')->exists());
 
         return response()->json(['data' => $pet]);
     }
@@ -52,11 +57,14 @@ class PetController extends Controller
 
     public function update(StorePetRequest $request, Pet $pet): JsonResponse
     {
+        abort_if($pet->ownership_kind === 'guardian' && ! Pet::ownedBy($request->user()->id)->whereKey($pet->id)->exists(), 403);
+
         return response()->json(['data' => $this->save($request, $pet)]);
     }
 
-    public function destroy(Pet $pet): JsonResponse
+    public function destroy(Request $request, Pet $pet): JsonResponse
     {
+        abort_if($pet->ownership_kind === 'guardian' && $pet->owner_id !== $request->user()->id, 403);
         $pet->delete();
 
         return response()->json(status: 204);
@@ -64,37 +72,6 @@ class PetController extends Controller
 
     private function save(StorePetRequest $request, Pet $pet): Pet
     {
-        $data = $request->validated();
-        $currentPaths = collect([$pet->image_path, ...($pet->gallery_paths ?? [])])->filter()->values();
-        $removedPaths = collect($request->input('removed_photo_paths', []))->intersect($currentPaths);
-        if ($removedPaths->isNotEmpty() && $currentPaths->count() - $removedPaths->count() < 1) {
-            throw ValidationException::withMessages(['removed_photo_paths' => 'O pet precisa manter pelo menos uma foto.']);
-        }
-        if ($removedPaths->isNotEmpty()) {
-            Storage::disk('public')->delete($removedPaths->all());
-            $remainingPaths = $currentPaths->diff($removedPaths)->values();
-            $data['image_path'] = $remainingPaths->first();
-            $data['gallery_paths'] = $remainingPaths->slice(1)->all();
-        }
-        $coverPath = $request->input('cover_photo_path');
-        $availablePaths = collect([$data['image_path'] ?? $pet->image_path, ...($data['gallery_paths'] ?? $pet->gallery_paths ?? [])])->filter()->values();
-        if ($coverPath && $availablePaths->contains($coverPath)) {
-            $data['image_path'] = $coverPath;
-            $data['gallery_paths'] = $availablePaths->reject(fn ($path) => $path === $coverPath)->values()->all();
-        }
-        if ($request->hasFile('image')) {
-            $data['image_path'] = $request->file('image')->store('pets', 'public');
-        }
-        if ($request->hasFile('photos')) {
-            $newPaths = collect($request->file('photos'))->map(fn ($photo) => $photo->store('pets/gallery', 'public'));
-            if (! $pet->image_path && ! isset($data['image_path'])) {
-                $data['image_path'] = $newPaths->shift();
-            }
-            $data['gallery_paths'] = [...($data['gallery_paths'] ?? $pet->gallery_paths ?? []), ...$newPaths->all()];
-        }
-        unset($data['image'], $data['photos'], $data['removed_photo_paths'], $data['cover_photo_path']);
-        $pet->fill($data)->save();
-
-        return $pet;
+        return $this->photos->save($request, $pet, $request->validated());
     }
 }

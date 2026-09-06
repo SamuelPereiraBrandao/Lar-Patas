@@ -27,6 +27,7 @@ const currentImages = computed(() =>
           : [],
 );
 const currentImage = computed(() => currentImages.value[photoIndex.value]);
+const currentAuthor = computed(() => currentPost.value?.user || props.author);
 watch(
     () => props.modelValue,
     (open) => {
@@ -130,12 +131,12 @@ async function toggleLike() {
                     ><div class="d-flex align-center ga-3 mb-4">
                         <v-avatar size="40" color="primary"
                             ><v-img
-                                v-if="author?.avatar_url"
-                                :src="author.avatar_url"
+                                v-if="currentAuthor?.avatar_url"
+                                :src="currentAuthor.avatar_url"
                                 cover
                         /></v-avatar>
                         <div>
-                            <b>{{ author?.name }}</b>
+                            <b>{{ currentAuthor?.name }}</b>
                             <div class="text-caption">
                                 {{ title || "Imagem do perfil" }}
                             </div>

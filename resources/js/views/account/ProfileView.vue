@@ -109,8 +109,8 @@ function openPost(post) {
     viewerTitle.value = "";
     viewerOpen.value = true;
 }
-function say(message) {
-    notify(message, "success");
+function say(message, type = "success") {
+    notify(message, type);
 }
 const friendActionLabel = computed(() => {
     if (friendshipStatus.value === "accepted") return "Remover amizade";

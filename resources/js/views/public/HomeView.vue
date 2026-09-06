@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import PetCard from "../../components/pets/PetCard.vue";
 import { usePetsStore } from "../../stores/pets";
-import { isLogged, userAvatar, userName } from "../../stores/ui";
+import { isLogged, notify, userAvatar, userName } from "../../stores/ui";
 import PostComposer from "../account/profile/PostComposer.vue";
 import ImageViewerDialog from "../account/profile/ImageViewerDialog.vue";
 
@@ -102,6 +102,24 @@ function openPost(post) {
     viewerPost.value = post;
     viewerOpen.value = true;
 }
+async function comment(post, body) {
+    if (!isLogged.value) return;
+    try {
+        const response = await fetch(`/api/profile/posts/${post.id}/comments`, {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { Accept: "application/json", "Content-Type": "application/json", "X-CSRF-TOKEN": document.querySelector('meta[name="csrf-token"]')?.content || "" },
+            body: JSON.stringify({ body }),
+        });
+        const data = await response.json();
+        if (!response.ok) return notify(data.message || "Não foi possível comentar.", "error");
+        post.comments ||= [];
+        post.comments.push(data.comment);
+        post.comments_count = post.comments.length;
+    } catch {
+        notify("Não foi possível comentar. Tente novamente.", "error");
+    }
+}
 onMounted(async () => {
     store.fetchPets();
     await loadFeed();
@@ -125,8 +143,7 @@ onBeforeUnmount(() => feedObserver?.disconnect());
                     <h1 class="text-h3 text-md-h2 font-weight-black mb-4">Pets, histórias e pessoas que cuidam.</h1>
                     <p class="hero-copy text-h6 mb-7">Compartilhe momentos com seu pet, conheça novas pessoas e encontre um amigo que está esperando por um lar.</p>
                     <div class="d-flex flex-wrap ga-3">
-                        <v-btn v-if="isLogged" color="secondary" size="large" rounded="lg" @click="openComposer">Compartilhar uma história<v-icon end icon="mdi-plus" /></v-btn><v-btn v-else to="/criar-conta" color="secondary" size="large" rounded="lg">Entrar na comunidade<v-icon end icon="mdi-plus" /></v-btn>
-                        <v-btn href="#adocao" color="white" variant="outlined" size="large" rounded="lg">Ver pets para adoção</v-btn>
+                       <v-btn v-if="!isLogged" to="/criar-conta" color="secondary" size="large" rounded="lg">Entrar na comunidade<v-icon end icon="mdi-plus" /></v-btn>
                     </div>
                 </v-col>
                 <v-col cols="12" md="4" lg="5" class="d-none d-md-flex justify-end">
@@ -161,7 +178,7 @@ onBeforeUnmount(() => feedObserver?.disconnect());
     </v-container>
 
     <section class="adoption-strip"><v-container class="py-10 py-md-12"><div class="d-flex flex-wrap align-end justify-space-between ga-3 mb-5"><div><div class="section-kicker mb-1">ADOÇÃO RESPONSÁVEL</div><h2 class="text-h4 font-weight-bold">Encontre seu próximo melhor amigo</h2></div><v-btn to="/pets" color="primary" variant="outlined">Ver todos os pets</v-btn></div><v-row><v-col v-for="pet in featuredPets" :key="pet.id" cols="12" md="4"><PetCard :pet="pet" /></v-col></v-row></v-container></section>
-    <ImageViewerDialog v-model="viewerOpen" :post="viewerPost" :posts="posts" :author="viewerPost?.user" @load-more="loadMorePosts" />
+    <ImageViewerDialog v-model="viewerOpen" :post="viewerPost" :posts="posts" :author="viewerPost?.user" @comment="comment" @load-more="loadMorePosts" />
 </template>
 
 <style scoped>

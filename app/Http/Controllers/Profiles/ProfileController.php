@@ -23,7 +23,7 @@ class ProfileController extends Controller
     {
         $viewerId = $request->user('sanctum')?->id ?? $request->user()?->id;
         $posts = ProfilePost::query()
-            ->with(['user:id,name,avatar_path,city,state', 'pet:id,name,image_path'])
+            ->with(['user:id,name,avatar_path,city,state', 'pet:id,name,image_path', 'comments.user:id,name,avatar_path'])
             ->withCount(['comments', 'likes'])
             ->when($viewerId, fn ($query) => $query->withExists([
                 'likes as is_liked' => fn ($likes) => $likes->where('user_id', $viewerId),

@@ -18,6 +18,23 @@ const pets = ref([]),
     editingPet = ref(null),
     filters = ref({ status: null, species: null, shelter: null });
 const pickupDialog = ref(false);
+const draftFilters = ref({ status: 'all', species: null, shelter: null });
+const page = ref(1);
+const statusOrder = { available: 0, in_process: 1, adopted: 2 };
+const statusOptions = [
+    { title: 'Disponíveis', value: 'available' },
+    { title: 'Em processo', value: 'in_process' },
+    { title: 'Adotados', value: 'adopted' },
+];
+function openFilters() {
+    draftFilters.value = { ...filters.value, status: filters.value.status || 'all' };
+    filterDialog.value = true;
+}
+function applyFilters() {
+    filters.value = { ...draftFilters.value, status: draftFilters.value.status === 'all' ? null : draftFilters.value.status };
+    page.value = 1;
+    filterDialog.value = false;
+}
 const pickupPet = ref(null);
 const pickupAdoption = ref(null);
 const releasing = ref(false);
@@ -54,7 +71,7 @@ const activeFilters = computed(
 );
 const filteredPets = computed(() =>
     pets.value.filter((pet) => {
-        const term = search.value.toLowerCase();
+        const term = (search.value || '').toLowerCase();
         return (
             (!term ||
                 [pet.name, pet.city, pet.shelter?.name]
@@ -64,9 +81,9 @@ const filteredPets = computed(() =>
                     .includes(term)) &&
             (!filters.value.status || pet.status === filters.value.status) &&
             (!filters.value.species || pet.species === filters.value.species) &&
-            (!filters.value.shelter || pet.shelter_id === filters.value.shelter)
+            (!filters.value.shelter || (filters.value.shelter === 'none' ? !pet.shelter_id : pet.shelter_id === filters.value.shelter))
         );
-    }),
+    }).sort((a, b) => (statusOrder[a.status] ?? 3) - (statusOrder[b.status] ?? 3)),
 );
 async function load() {
     const [p, s, l] = await Promise.all([
@@ -92,9 +109,9 @@ function editPet(pet) {
     petDialog.value = true;
 }
 function clearFilters() {
-    filters.value = { status: null, species: null, shelter: null };
-    filterDialog.value = false;
+    draftFilters.value = { status: 'all', species: null, shelter: null };
 }
+watch(search, () => { page.value = 1; });
 onMounted(() => {
     load();
 });
@@ -145,7 +162,7 @@ watch(shelterDialog, (open) => {
                         prepend-icon="mdi-filter-variant"
                         :variant="activeFilters ? 'tonal' : 'outlined'"
                         color="primary"
-                        @click="filterDialog = true"
+                        @click="openFilters"
                         >Filtros</v-btn
                     ></v-badge
                 ><v-menu v-model="optionsMenu"
@@ -173,6 +190,9 @@ watch(shelterDialog, (open) => {
                 ></v-menu>
             </div>
             <v-data-table
+                v-model:page="page"
+                disable-sort
+                items-per-page-text="Pets por página"
                 :headers="headers"
                 :items="filteredPets"
                 item-value="id"
@@ -252,43 +272,39 @@ watch(shelterDialog, (open) => {
                 ></v-data-table
             ></v-card
         >
-        <v-dialog v-model="filterDialog" max-width="560"
-            ><v-card rounded="xl"
-                ><v-card-title>Filtros de pets</v-card-title
-                ><v-card-text
-                    ><v-select
-                        v-model="filters.status"
-                        :items="[
-                            { title: 'Disponível', value: 'available' },
-                            { title: 'Em processo', value: 'in_process' },
-                            { title: 'Adotado', value: 'adopted' },
-                        ]"
-                        label="Situação"
-                        clearable
-                        variant="outlined" /><v-select
-                        v-model="filters.species"
-                        :items="[
-                            { title: 'Cachorro', value: 'dog' },
-                            { title: 'Gato', value: 'cat' },
-                        ]"
-                        label="Espécie"
-                        clearable
-                        variant="outlined" /><v-select
-                        v-model="filters.shelter"
-                        :items="shelterOptions"
-                        label="Sede"
-                        clearable
-                        variant="outlined" /></v-card-text
-                ><v-card-actions
-                    ><v-btn @click="clearFilters">Limpar</v-btn
-                    ><v-spacer /><v-btn
-                        color="primary"
-                        @click="filterDialog = false"
-                        >Aplicar</v-btn
-                    ></v-card-actions
-                ></v-card
-            ></v-dialog
-        >
+        <v-dialog v-model="filterDialog" max-width="600" scrollable>
+            <v-card rounded="xl">
+                <div class="d-flex align-center ga-3 pa-6">
+                    <v-avatar color="primary" variant="tonal" rounded="lg" size="44"><v-icon icon="mdi-filter-variant" /></v-avatar>
+                    <div><h2 class="text-h6 font-weight-bold">Filtrar pets</h2><p class="text-body-2 text-medium-emphasis">Encontre quem você está procurando.</p></div>
+                    <v-spacer /><v-btn icon="mdi-close" variant="text" size="small" aria-label="Fechar filtros" @click="filterDialog = false" />
+                </div>
+                <v-divider />
+                <v-card-text class="pa-6">
+                    <div class="text-subtitle-2 mb-3">Situação</div>
+                    <v-chip-group v-model="draftFilters.status" color="primary" column mandatory>
+                        <v-chip value="all" variant="tonal" filter>Todos</v-chip>
+                        <v-chip v-for="option in statusOptions" :key="option.value" :value="option.value" variant="tonal" filter>{{ option.title }}</v-chip>
+                    </v-chip-group>
+                    <p class="text-caption text-medium-emphasis mt-2 mb-6">Disponíveis primeiro, depois em processo e adotados.</p>
+                    <v-row>
+                        <v-col cols="12" sm="6">
+                            <v-select v-model="draftFilters.species" :items="[{ title: 'Todas as espécies', value: null }, { title: 'Cachorros', value: 'dog' }, { title: 'Gatos', value: 'cat' }]" label="Espécie" variant="outlined" rounded="lg" hide-details />
+                        </v-col>
+                        <v-col cols="12" sm="6">
+                            <v-select v-model="draftFilters.shelter" :items="[{ title: 'Todas as sedes', value: null }, { title: 'Sem sede', value: 'none' }, ...shelterOptions]" label="Sede" variant="outlined" rounded="lg" hide-details />
+                        </v-col>
+                    </v-row>
+                </v-card-text>
+                <v-divider />
+                <v-card-actions class="pa-6 d-flex flex-wrap ga-2">
+                    <v-btn color="primary" variant="text" prepend-icon="mdi-filter-remove-outline" @click="clearFilters">Limpar</v-btn>
+                    <v-spacer />
+                    <v-btn variant="text" @click="filterDialog = false">Cancelar</v-btn>
+                    <v-btn color="primary" variant="flat" rounded="lg" prepend-icon="mdi-check" @click="applyFilters">Aplicar filtros</v-btn>
+                </v-card-actions>
+            </v-card>
+        </v-dialog>
         <AdoptionPickupDialog v-model="pickupDialog" :pet="pickupPet" :adoption="pickupAdoption" :release="releasing" @saved="load" />
         <PetEditorDialog
             v-model="petDialog"

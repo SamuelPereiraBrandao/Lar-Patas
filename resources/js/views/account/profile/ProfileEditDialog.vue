@@ -108,7 +108,7 @@ async function remove(kind) {
             headers: formHeaders,
         }),
         d = await r.json();
-    if (!r.ok) return emit("notice", d.message || "Falha ao remover.");
+    if (!r.ok) return emit("notice", d.message || "Falha ao remover.", "error");
     emit("saved", d.user);
     emit("notice", "Imagem removida.");
 }
@@ -122,7 +122,10 @@ async function save() {
                 body: JSON.stringify(form),
             }),
             d = await r.json();
-        if (!r.ok) throw Error(d.message || "Falha ao salvar.");
+        if (!r.ok) {
+            tab.value = "details";
+            throw Error(d.message || "Falha ao salvar.");
+        }
         let user =
             (await upload("/api/profile/avatar", "avatar", avatarFile.value)) ||
             d.user;
@@ -133,7 +136,7 @@ async function save() {
         emit("update:modelValue", false);
         emit("notice", "Perfil atualizado.");
     } catch (e) {
-        emit("notice", e.message);
+        emit("notice", e.message, "error");
     } finally {
         saving.value = false;
     }

@@ -82,7 +82,7 @@ class AuthController extends Controller
             'housing_type' => 'nullable|in:Casa com quintal,Casa sem quintal,Apartamento',
             'has_other_pets' => 'boolean',
             'household_description' => 'nullable|string|max:1000',
-        ]);
+        ], ['housing_type.in' => 'Escolha um tipo de moradia válido na aba Informações.']);
         $request->user()->update($data);
 
         return response()->json(['user' => $request->user()->fresh()->load('roles')]);

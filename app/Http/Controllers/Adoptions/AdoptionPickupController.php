@@ -30,9 +30,10 @@ class AdoptionPickupController extends Controller
         $adoption = DB::transaction(function () use ($request, $adoption, $data): Adoption {
             $pet = Pet::lockForUpdate()->findOrFail($adoption->pet_id);
             $adoption = Adoption::lockForUpdate()->findOrFail($adoption->id);
+            abort_if($adoption->status === 'approved' && ! $request->isMethod('patch'), 409, 'Esta retirada já foi agendada. Use o reagendamento.');
             abort_if($pet->status === 'adopted' || $pet->ownership_kind === 'guardian', 409, 'Este pet não está disponível para adoção.');
-            abort_if($adoption->status !== 'pending' || ! $adoption->user, 409, 'Esta solicitação não pode ser agendada.');
-            abort_if($pet->adoptions()->where('status', 'approved')->whereNotNull('pickup_at')->whereNull('released_at')->exists(), 409, 'Já existe uma retirada agendada para este pet.');
+            abort_if(! in_array($adoption->status, ['pending', 'approved'], true) || $adoption->released_at || $adoption->cancelled_at || ! $adoption->user?->is_active, 409, 'Esta solicitação não pode ser agendada.');
+            abort_if($pet->adoptions()->whereKeyNot($adoption->id)->where('status', 'approved')->whereNotNull('pickup_at')->whereNull('released_at')->exists(), 409, 'Já existe uma retirada agendada para este pet.');
 
             $code = (string) random_int(100000, 999999);
             $adoption->update([
@@ -41,6 +42,10 @@ class AdoptionPickupController extends Controller
                 'status' => 'approved',
                 'pickup_code' => $code,
                 'scheduled_by' => $request->user()->id,
+                'reschedule_requested_at' => null,
+                'requested_pickup_at' => null,
+                'reschedule_reason' => null,
+                'reminded_at' => null,
             ]);
             $pet->update(['status' => 'in_process']);
             $date = $adoption->pickup_at->copy()->timezone($adoption->pickup_timezone)->format('d/m/Y H:i');

@@ -12,6 +12,17 @@
 @import '@mdi/font/css/materialdesignicons.css';
 :root { font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #173b37; background: #f7faf9; }
 body { margin: 0; min-width: 320px; }
+.v-dialog > .v-overlay__content > .v-card { border-radius: 24px; border: 1px solid rgba(var(--v-theme-on-surface), .1); }
+.v-dialog .v-card-title { padding: 24px 24px 12px; font-size: 1.25rem; font-weight: 700; white-space: normal; line-height: 1.4; }
+.v-dialog .v-card-text { padding: 16px 24px 24px; }
+.v-dialog .v-card-actions { padding: 16px 24px; gap: 8px; border-top: 1px solid rgba(var(--v-theme-on-surface), .08); flex-wrap: wrap; }
+.v-dialog .v-field--focused { background: rgba(var(--v-theme-primary), .04); }
+.v-btn:focus-visible, a:focus-visible { outline: 3px solid rgb(var(--v-theme-primary)); outline-offset: 3px; }
+.adoption-steps { display: grid; grid-template-columns: repeat(4, 1fr); list-style: none; padding: 0; gap: 6px; }
+.adoption-steps li { border-top: 3px solid rgba(var(--v-theme-on-surface), .2); padding-top: 8px; font-size: .75rem; color: rgba(var(--v-theme-on-surface), .75); }
+.adoption-steps .done, .adoption-steps .current { border-color: rgb(var(--v-theme-primary)); color: rgb(var(--v-theme-primary)); }
+.adoption-steps .current { font-weight: 700; }
+@media (prefers-reduced-motion: reduce) { .pet-card { transition: none; } .pet-card:hover { transform: none; } }
 .pet-page { background: #f7faf9; min-height: 100vh; }
 .v-theme--larEPatasDark.pet-page { background: #0e1514; }
 .v-theme--larEPatasDark .filter-panel, .v-theme--larEPatasDark .pet-card { border-color: #29413c !important; }

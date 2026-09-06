@@ -119,8 +119,14 @@ function goToProfile(item) {
 }
 function openNotification(item) {
     open.value = false;
-    if (item.type === 'adoption_pickup') {
-        router.push('/painel');
+    if (item.type === "adoption_care") {
+        router.push(
+            item.data?.url === "/admin/pendencias"
+                ? "/admin/pendencias"
+                : "/painel",
+        );
+    } else if (item.type === "adoption_pickup") {
+        router.push("/painel");
     } else if (item.data?.post_id) {
         router.push({
             path: "/perfil",

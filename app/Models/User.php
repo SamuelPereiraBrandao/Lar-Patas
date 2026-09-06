@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\HasApiTokens;
 
 #[Fillable(['name', 'email', 'password', 'is_active', 'phone', 'city', 'state', 'birth_date', 'housing_type', 'has_other_pets', 'household_description', 'avatar_path', 'banner_path', 'two_factor_code', 'two_factor_expires_at'])]
-#[Hidden(['password', 'remember_token'])]
+#[Hidden(['password', 'remember_token', 'two_factor_code', 'two_factor_expires_at'])]
 class User extends Authenticatable implements MustVerifyEmail
 {
     /** @use HasFactory<UserFactory> */

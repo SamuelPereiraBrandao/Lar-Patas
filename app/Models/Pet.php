@@ -25,6 +25,11 @@ class Pet extends Model
         return $this->hasMany(Adoption::class);
     }
 
+    public function favorites(): HasMany
+    {
+        return $this->hasMany(PetFavorite::class);
+    }
+
     public function owner(): BelongsTo
     {
         return $this->belongsTo(User::class, 'owner_id');

@@ -1,4 +1,6 @@
 <script setup>
+import { preparePhoto, uploadPhotos } from "../../stores/images";
+const uploadProgress = ref(0);
 import { computed, onBeforeUnmount, reactive, ref, watch } from "vue";
 import { notify } from "../../stores/ui";
 const props = defineProps({
@@ -29,13 +31,17 @@ async function deletePet() {
                         ?.content || "",
             },
         });
-        if (!response.ok) throw new Error();
+        if (!response.ok)
+            throw new Error(
+                (await response.json()).message ||
+                    "Não foi possível excluir o pet.",
+            );
         deleteDialog.value = false;
         emit("deleted", props.pet.id);
         emit("update:modelValue", false);
         notify("Pet excluído.");
-    } catch {
-        notify("Não foi possível excluir o pet.", "error");
+    } catch (error) {
+        notify(error.message || "Não foi possível excluir o pet.", "error");
     } finally {
         deleting.value = false;
     }
@@ -104,11 +110,17 @@ const cities = computed(
             .find((location) => location.code === form.state)
             ?.cities.map((city) => city.name) || [],
 );
-const pendingOwners = computed(() => (props.pet?.caretakers || []).filter(
-    owner => owner.pivot?.status === "pending" && form.owner_ids?.includes(owner.id),
-));
+const pendingOwners = computed(() =>
+    (props.pet?.caretakers || []).filter(
+        (owner) =>
+            owner.pivot?.status === "pending" &&
+            form.owner_ids?.includes(owner.id),
+    ),
+);
 function useShelterLocation() {
-    const shelter = props.shelterOptions.find(shelter => shelter.value === form.shelter_id);
+    const shelter = props.shelterOptions.find(
+        (shelter) => shelter.value === form.shelter_id,
+    );
     if (props.administrative && shelter) {
         form.city = shelter.city || "";
         form.state = shelter.state || "";
@@ -248,10 +260,7 @@ async function save() {
                     data.append(key, JSON.stringify(value));
                 return;
             }
-            if (
-                props.administrative &&
-                ["lives_with_owner"].includes(key)
-            )
+            if (props.administrative && ["lives_with_owner"].includes(key))
                 return;
             if (!props.administrative && ["shelter_id", "status"].includes(key))
                 return;
@@ -266,9 +275,8 @@ async function save() {
                       : (value ?? ""),
             );
         });
-        gallery.value
-            .filter((photo) => photo.file)
-            .forEach((photo) => data.append("photos[]", photo.file));
+        for (const photo of gallery.value.filter((photo) => photo.file))
+            data.append("photos[]", await preparePhoto(photo.file));
         removedPaths.value.forEach((path) =>
             data.append("removed_photo_paths[]", path),
         );
@@ -279,27 +287,16 @@ async function save() {
         const endpoint = props.administrative
             ? "/api/pets"
             : "/api/profile/pets";
-        const response = await fetch(
+        uploadProgress.value = 0;
+        const result = await uploadPhotos(
             props.pet ? endpoint + "/" + props.pet.id : endpoint,
-            {
-                method: "POST",
-                credentials: "same-origin",
-                headers: {
-                    Accept: "application/json",
-                    "X-CSRF-TOKEN":
-                        document.querySelector('meta[name="csrf-token"]')
-                            ?.content || "",
-                },
-                body: data,
-            },
+            data,
+            (value) => (uploadProgress.value = value),
         );
-        const result = await response.json();
-        if (!response.ok)
-            return notify(result.message || "Erro ao salvar.", "error");
         emit("saved", result.data);
         emit("update:modelValue", false);
-    } catch {
-        notify("Erro ao salvar. Tente novamente.", "error");
+    } catch (error) {
+        notify(error.message || "Erro ao salvar. Tente novamente.", "error");
     } finally {
         saving.value = false;
     }
@@ -438,8 +435,13 @@ async function save() {
                                             "
                                     /></template>
                                 </v-autocomplete>
-                                <p v-for="owner in pendingOwners" :key="owner.id" class="text-caption mt-2 text-medium-emphasis">
-                                    Solicitação feita — aguardando confirmação de {{ owner.name }}.
+                                <p
+                                    v-for="owner in pendingOwners"
+                                    :key="owner.id"
+                                    class="text-caption mt-2 text-medium-emphasis"
+                                >
+                                    Solicitação feita — aguardando confirmação
+                                    de {{ owner.name }}.
                                 </p>
                             </v-col>
                             <v-col v-if="!administrative" cols="12">
@@ -461,7 +463,10 @@ async function save() {
                             <v-col v-if="administrative" cols="12">
                                 <v-select
                                     v-model="form.shelter_id"
-                                    :items="[{ title: 'Nenhuma', value: null }, ...shelterOptions]"
+                                    :items="[
+                                        { title: 'Nenhuma', value: null },
+                                        ...shelterOptions,
+                                    ]"
                                     label="Sede"
                                     @update:model-value="useShelterLocation"
                                     variant="outlined"
@@ -475,7 +480,9 @@ async function save() {
                                 <v-select
                                     v-model="form.state"
                                     :items="states"
-                                    :disabled="administrative && !!form.shelter_id"
+                                    :disabled="
+                                        administrative && !!form.shelter_id
+                                    "
                                     label="Estado (UF)"
                                     variant="outlined"
                                     @update:model-value="form.city = ''"
@@ -490,7 +497,10 @@ async function save() {
                                     v-model="form.city"
                                     :items="cities"
                                     label="Cidade"
-                                    :disabled="!form.state || (administrative && !!form.shelter_id)"
+                                    :disabled="
+                                        !form.state ||
+                                        (administrative && !!form.shelter_id)
+                                    "
                                     variant="outlined"
                                 />
                             </v-col>
@@ -621,6 +631,8 @@ async function save() {
                     </div>
                 </div></v-card-text
             ><v-card-actions class="pa-6 pt-0 flex-wrap"
+                ><v-chip v-if="saving" size="small"
+                    >Enviando {{ uploadProgress }}%</v-chip
                 ><v-btn
                     v-if="pet && canDelete"
                     color="error"

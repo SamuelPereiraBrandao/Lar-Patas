@@ -11,17 +11,23 @@ use Illuminate\Support\Facades\DB;
 
 class AdoptionController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
+        abort_unless($request->user()->hasRole('admin'), 403);
+
         return response()->json(['data' => Adoption::with('pet:id,name')->latest()->get()]);
     }
 
     public function store(Request $request, Pet $pet): JsonResponse
     {
-        abort_if($pet->status === 'adopted', 422, 'Este pet já foi adotado.');
         $user = $request->user();
-        $user->has_other_pets ??= false;
-        $adoption = $pet->adoptions()->firstOrCreate(['user_id' => $user->id], ['applicant_name' => $user->name, 'email' => $user->email, 'phone' => $user->phone ?: 'Não informado', 'housing_type' => $user->housing_type ?: 'Não informado', 'has_other_pets' => $user->has_other_pets, 'message' => $user->household_description ?: 'Perfil de adotante preenchido.', 'status' => 'pending']);
+        $adoption = DB::transaction(function () use ($user, $pet): Adoption {
+            $pet = Pet::lockForUpdate()->findOrFail($pet->id);
+            abort_if($pet->status !== 'available' || $pet->ownership_kind === 'guardian', 422, 'Este pet não está disponível para adoção.');
+            abort_if(Pet::ownedBy($user->id)->whereKey($pet->id)->exists(), 422, 'Você já é responsável por este pet.');
+
+            return $pet->adoptions()->firstOrCreate(['user_id' => $user->id], ['applicant_name' => $user->name, 'email' => $user->email, 'phone' => $user->phone ?: 'Não informado', 'housing_type' => $user->housing_type ?: 'Não informado', 'has_other_pets' => $user->has_other_pets ?? false, 'message' => $user->household_description ?: 'Perfil de adotante preenchido.', 'status' => 'pending']);
+        });
 
         return response()->json(['data' => $adoption], 201);
     }

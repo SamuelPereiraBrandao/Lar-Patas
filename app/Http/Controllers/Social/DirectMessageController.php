@@ -11,6 +11,7 @@ use App\Models\DirectConversation;
 use App\Models\DirectMessage;
 use App\Models\FriendRequest;
 use App\Models\User;
+use App\Models\UserBlock;
 use App\Models\UserNotification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -21,18 +22,28 @@ class DirectMessageController extends Controller
     {
         $userId = $request->user()->id;
         $requests = FriendRequest::with(['sender:id,name,avatar_path,city,state', 'recipient:id,name,avatar_path,city,state'])
+            ->whereNotIn('sender_id', UserBlock::excludedIds($userId))
+            ->whereNotIn('recipient_id', UserBlock::excludedIds($userId))
             ->where('status', 'accepted')
             ->where(fn ($query) => $query->where('sender_id', $userId)->orWhere('recipient_id', $userId))
             ->latest()
             ->get();
 
-        return response()->json(['data' => $requests->map(fn (FriendRequest $friendship) => $friendship->sender_id === $userId ? $friendship->recipient : $friendship->sender)->values()]);
+        $conversations = DirectConversation::where('user_one_id', $userId)->orWhere('user_two_id', $userId)->get();
+        $pastContacts = User::whereIn('id', $conversations->map(fn (DirectConversation $conversation) => $conversation->user_one_id === $userId ? $conversation->user_two_id : $conversation->user_one_id))->get(['id', 'name', 'avatar_path', 'city', 'state']);
+
+        return response()->json(['data' => $requests->map(fn (FriendRequest $friendship) => $friendship->sender_id === $userId ? $friendship->recipient : $friendship->sender)->concat($pastContacts)->unique('id')->values()]);
     }
 
     public function open(Request $request, User $user): JsonResponse
     {
-        abort_unless($this->areFriends($request->user()->id, $user->id), 403, 'Você só pode conversar com amigos.');
+        $ids = [$request->user()->id, $user->id];
+        sort($ids);
+        $existing = DirectConversation::where('user_one_id', $ids[0])->where('user_two_id', $ids[1])->exists();
+        abort_unless($existing || $this->areFriends($request->user()->id, $user->id), 403, 'Você só pode conversar com amigos.');
         $conversation = $this->conversationFor($request->user()->id, $user->id);
+
+        $conversation->setAttribute('can_message', $this->areFriends($request->user()->id, $user->id));
 
         return response()->json(['data' => $conversation]);
     }
@@ -68,6 +79,7 @@ class DirectMessageController extends Controller
     public function store(Request $request, DirectConversation $conversation): JsonResponse
     {
         $this->authorizeParticipant($request, $conversation);
+        abort_unless($this->areFriends($conversation->user_one_id, $conversation->user_two_id), 403, 'Para continuar conversando, desbloqueie o usuário ou adicione a amizade novamente.');
         $data = $request->validate(['body' => 'required|string|max:1500']);
         $message = $conversation->messages()->create(['user_id' => $request->user()->id, 'body' => $data['body']]);
         $messageData = $this->messageData($message, $request->user()->id);
@@ -93,6 +105,7 @@ class DirectMessageController extends Controller
     {
         $message->load('conversation');
         $this->authorizeParticipant($request, $message->conversation);
+        abort_unless($this->areFriends($message->conversation->user_one_id, $message->conversation->user_two_id), 403);
         $like = $message->likes()->where('user_id', $request->user()->id)->first();
 
         if ($like) {
@@ -119,6 +132,10 @@ class DirectMessageController extends Controller
 
     private function areFriends(int $firstUserId, int $secondUserId): bool
     {
+        if (UserBlock::between($firstUserId, $secondUserId)) {
+            return false;
+        }
+
         return FriendRequest::where('status', 'accepted')
             ->where(fn ($query) => $query->where('sender_id', $firstUserId)->where('recipient_id', $secondUserId)->orWhere(fn ($reverseQuery) => $reverseQuery->where('sender_id', $secondUserId)->where('recipient_id', $firstUserId)))
             ->exists();

@@ -10,6 +10,7 @@ use App\Models\Shelter;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class AdminController extends Controller
 {
@@ -72,7 +73,15 @@ class AdminController extends Controller
     {
         $this->ensureAdmin($request);
         $data = $request->validate(['is_active' => 'required|boolean']);
+        abort_if($request->user()->is($user) && ! $data['is_active'], 422, 'Você não pode desativar sua própria conta.');
         $user->update($data);
+        if (! $user->is_active) {
+            $user->tokens()->delete();
+            $user->forceFill(['remember_token' => null, 'two_factor_code' => null, 'two_factor_expires_at' => null])->save();
+            if (config('session.driver') === 'database') {
+                DB::table('sessions')->where('user_id', $user->id)->delete();
+            }
+        }
 
         return response()->json(['data' => $user->fresh()->load('roles:id,name,label')]);
     }

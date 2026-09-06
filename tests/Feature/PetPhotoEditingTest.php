@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Pet;
+use App\Models\Role;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -14,6 +15,16 @@ class PetPhotoEditingTest extends TestCase
 {
     use RefreshDatabase;
 
+    private function account(string $endpoint): User
+    {
+        $user = User::factory()->create();
+        if ($endpoint === '/api/pets') {
+            $user->roles()->attach(Role::firstOrCreate(['name' => 'admin'], ['label' => 'Admin']));
+        }
+
+        return $user;
+    }
+
     public static function endpoints(): array
     {
         return ['profile' => ['/api/profile/pets'], 'administration' => ['/api/pets']];
@@ -23,7 +34,7 @@ class PetPhotoEditingTest extends TestCase
     public function test_creation_without_photo_returns_422(string $endpoint): void
     {
         $pet = Pet::factory()->make();
-        $this->actingAs(User::factory()->create(), 'sanctum')->postJson($endpoint, $this->details($pet))
+        $this->actingAs($this->account($endpoint), 'sanctum')->postJson($endpoint, $this->details($pet))
             ->assertUnprocessable()
             ->assertJsonPath('errors.photos.0', 'Adicione pelo menos uma foto para criar o pet.');
         $this->assertDatabaseCount('pets', 0);
@@ -33,7 +44,7 @@ class PetPhotoEditingTest extends TestCase
     {
         Storage::fake('public');
         $file = UploadedFile::fake()->createWithContent('cover.png', base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII='));
-        $response = $this->actingAs(User::factory()->create(), 'sanctum')->postJson('/api/pets', [...$this->details(Pet::factory()->make()), 'image' => $file])->assertCreated();
+        $response = $this->actingAs($this->account('/api/pets'), 'sanctum')->postJson('/api/pets', [...$this->details(Pet::factory()->make()), 'image' => $file])->assertCreated();
         $this->assertDatabaseHas('pets', ['id' => $response->json('data.id'), 'image_path' => 'pets/'.$file->hashName()]);
         Storage::disk('public')->assertExists('pets/'.$file->hashName());
     }
@@ -42,7 +53,7 @@ class PetPhotoEditingTest extends TestCase
     public function test_existing_cover_and_removal_are_saved(string $endpoint): void
     {
         Storage::fake('public');
-        $user = User::factory()->create();
+        $user = $this->account($endpoint);
         $pet = Pet::factory()->create(['owner_id' => $user->id, 'ownership_kind' => 'guardian', 'image_path' => 'pets/old.jpg', 'gallery_paths' => ['pets/second.jpg', 'pets/third.jpg']]);
         Storage::disk('public')->put('pets/old.jpg', 'old');
         Storage::disk('public')->put('pets/second.jpg', 'second');
@@ -60,7 +71,7 @@ class PetPhotoEditingTest extends TestCase
     public function test_new_upload_can_be_the_cover(string $endpoint): void
     {
         Storage::fake('public');
-        $user = User::factory()->create();
+        $user = $this->account($endpoint);
         $pet = Pet::factory()->create(['owner_id' => $user->id, 'ownership_kind' => 'guardian', 'image_path' => 'pets/old.jpg']);
         $file = UploadedFile::fake()->createWithContent('cover.png', base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII='));
 

@@ -57,6 +57,7 @@ class DemoCommunitySeeder extends Seeder
             $this->createShelters();
             $this->createPets();
             $this->createAdoptions();
+            $this->createBelinhaInterests();
             $this->createPosts();
             $this->createFriendships();
         });
@@ -184,6 +185,29 @@ class DemoCommunitySeeder extends Seeder
             foreach (['Que carinha mais querida! Como é a rotina dele?', 'A equipe pode orientar sobre adaptação e cuidados.', 'Adorei conhecer essa história. Torcendo por um lar cheio de carinho!'] as $offset => $body) {
                 Message::create(['pet_id' => $pet->id, 'user_id' => $this->users[($index + $offset) % 29]->id, 'body' => $body, 'created_at' => now()->subDays(3)->addHours($offset)]);
             }
+        }
+    }
+
+    private function createBelinhaInterests(): void
+    {
+        $pet = Pet::where('name', 'Belinha')->sole();
+        $existingApplicants = $pet->adoptions()->pluck('user_id')->all();
+        $applicants = collect($this->users)
+            ->reject(fn (User $user): bool => in_array($user->id, $existingApplicants, true) || Pet::ownedBy($user->id)->whereKey($pet->id)->exists())
+            ->take(10);
+
+        foreach ($applicants as $user) {
+            Adoption::create([
+                'pet_id' => $pet->id,
+                'user_id' => $user->id,
+                'applicant_name' => $user->name,
+                'email' => $user->email,
+                'phone' => $user->phone,
+                'housing_type' => $user->housing_type,
+                'has_other_pets' => $user->has_other_pets,
+                'message' => 'Gostaria de conhecer a Belinha e conversar sobre os cuidados para recebê-la em casa.',
+                'status' => 'pending',
+            ]);
         }
     }
 

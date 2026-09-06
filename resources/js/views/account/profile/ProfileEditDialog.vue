@@ -1,5 +1,8 @@
-﻿<script setup>
+<script setup>
+import DateField from "../../../components/DateField.vue";
 import { computed, reactive, ref, watch } from "vue";
+import { preparePhoto, uploadPhotos } from "../../../stores/images";
+const uploadProgress = ref(0);
 import ProfilePhotoPreview from "./ProfilePhotoPreview.vue";
 const props = defineProps({
         modelValue: Boolean,
@@ -90,16 +93,14 @@ watch(
 async function upload(url, key, file) {
     if (!file) return null;
     const fd = new FormData();
-    fd.append(key, file);
-    const r = await fetch(url, {
-            method: "POST",
-            credentials: "same-origin",
-            headers: formHeaders,
-            body: fd,
-        }),
-        d = await r.json();
-    if (!r.ok) throw Error(d.message || "Falha ao enviar imagem.");
-    return d.user;
+    fd.append(key, await preparePhoto(file, key === "avatar" ? 400 : 1600));
+    uploadProgress.value = 0;
+    const data = await uploadPhotos(
+        url,
+        fd,
+        (value) => (uploadProgress.value = value),
+    );
+    return data.user;
 }
 async function remove(kind) {
     const r = await fetch(`/api/profile/${kind}`, {
@@ -181,10 +182,9 @@ async function save() {
                                     :disabled="!form.state"
                                     variant="outlined" /></v-col
                             ><v-col cols="12" md="6"
-                                ><v-text-field
+                                ><DateField
                                     v-model="form.birth_date"
                                     label="Data de nascimento"
-                                    type="date"
                                     variant="outlined" /></v-col
                             ><v-col cols="12" md="6"
                                 ><v-select
@@ -224,6 +224,8 @@ async function save() {
                                 emit('notice', $event)
                             " /></v-window-item></v-window></v-card-text
             ><v-card-actions class="pa-6 pt-0"
+                ><v-chip v-if="saving" size="small"
+                    >Enviando {{ uploadProgress }}%</v-chip
                 ><v-spacer /><v-btn @click="emit('update:modelValue', false)"
                     >Cancelar</v-btn
                 ><v-btn color="primary" :loading="saving" @click="save"

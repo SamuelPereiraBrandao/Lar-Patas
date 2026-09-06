@@ -45,7 +45,7 @@ class AuthController extends Controller
     {
         $data = $request->validate(['code' => 'required|digits:6']);
         $user = User::find($request->session()->get('two_factor_user_id'));
-        if (! $user || ! $user->two_factor_expires_at?->isFuture() || ! Hash::check($data['code'], $user->two_factor_code)) {
+        if (! $user || ! $user->is_active || ! $user->hasVerifiedEmail() || ! $user->two_factor_expires_at?->isFuture() || ! Hash::check($data['code'], $user->two_factor_code)) {
             return response()->json(['message' => 'Código inválido ou expirado.'], 422);
         }
 
@@ -60,7 +60,7 @@ class AuthController extends Controller
     public function resendTwoFactor(Request $request): JsonResponse
     {
         $user = User::find($request->session()->get('two_factor_user_id'));
-        abort_unless($user, 403);
+        abort_unless($user && $user->is_active && $user->hasVerifiedEmail(), 403);
         $this->sendTwoFactorCode($user);
 
         return response()->json(['message' => 'Enviamos um novo código para o seu e-mail.']);

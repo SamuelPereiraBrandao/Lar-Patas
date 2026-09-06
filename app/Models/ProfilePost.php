@@ -9,6 +9,11 @@ use Illuminate\Support\Facades\Storage;
 
 class ProfilePost extends Model
 {
+    protected static function booted(): void
+    {
+        static::addGlobalScope('visible', fn ($query) => $query->whereNull('hidden_at'));
+    }
+
     protected $fillable = ['user_id', 'pet_id', 'body', 'image_path', 'gallery_paths'];
 
     protected $casts = ['gallery_paths' => 'array'];

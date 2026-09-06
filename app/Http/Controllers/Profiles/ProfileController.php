@@ -4,12 +4,14 @@ namespace App\Http\Controllers\Profiles;
 
 use App\Http\Controllers\Controller;
 use App\Http\PetPhotoUpdater;
+use App\Http\SafeImageStorage;
 use App\Jobs\PublishAblyNotification;
 use App\Models\City;
 use App\Models\FriendRequest;
 use App\Models\Pet;
 use App\Models\ProfilePost;
 use App\Models\User;
+use App\Models\UserBlock;
 use App\Models\UserNotification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -23,6 +25,8 @@ class ProfileController extends Controller
     {
         $viewerId = $request->user('sanctum')?->id ?? $request->user()?->id;
         $posts = ProfilePost::query()
+            ->where(fn ($query) => $query->whereNull('image_path')->orWhere(fn ($images) => $images->where('image_path', 'not like', 'profiles/avatars/%')->where('image_path', 'not like', 'profiles/banners/%')))
+            ->whereNotIn('user_id', UserBlock::excludedIds($viewerId))
             ->with(['user:id,name,avatar_path,city,state', 'pet:id,name,image_path', 'comments.user:id,name,avatar_path'])
             ->withCount(['comments', 'likes'])
             ->when($viewerId, fn ($query) => $query->withExists([
@@ -43,10 +47,10 @@ class ProfileController extends Controller
     public function show(Request $request): JsonResponse
     {
         $user = $request->user();
-        $posts = $user->profilePosts()->with(['pet:id,name,image_path', 'comments.user:id,name,avatar_path'])->withCount('likes')->withExists(['likes as is_liked' => fn ($query) => $query->where('user_id', $user->id)])->latest()->paginate(3);
+        $posts = $user->profilePosts()->when($user->hasRole('admin'), fn ($query) => $query->withoutGlobalScope('visible'))->with(['pet:id,name,image_path', 'comments.user:id,name,avatar_path'])->withCount('likes')->withExists(['likes as is_liked' => fn ($query) => $query->where('user_id', $user->id)])->latest()->paginate(3);
         $myPets = Pet::ownedBy($user->id)->with(['owner:id,name', 'caretakers' => fn ($query) => $query->select('users.id', 'users.name')])->get();
 
-        return response()->json(['profile' => $user->fresh()->load('roles'), 'stats' => ['pets' => $myPets->count(), 'interests' => $user->adoptions()->count(), 'adoptions' => $myPets->where('ownership_kind', 'adoption')->count(), 'posts' => $user->profilePosts()->count()], 'my_pets' => $myPets, 'adopted_pets' => $myPets, 'posts' => $posts->items(), 'pagination' => ['current_page' => $posts->currentPage(), 'has_more' => $posts->hasMorePages()]]);
+        return response()->json(['profile' => $user->fresh()->load('roles'), 'stats' => ['pets' => $myPets->where('status', 'adopted')->count(), 'interests' => $user->adoptions()->count(), 'adoptions' => $myPets->where('ownership_kind', 'adoption')->where('status', 'adopted')->count(), 'posts' => $user->profilePosts()->count()], 'my_pets' => $myPets, 'adopted_pets' => $myPets->where('status', 'adopted')->values(), 'posts' => $posts->items(), 'pagination' => ['current_page' => $posts->currentPage(), 'has_more' => $posts->hasMorePages()]]);
     }
 
     public function uploadAvatar(Request $request): JsonResponse
@@ -69,6 +73,26 @@ class ProfileController extends Controller
         return $this->removeProfileImage($request, 'banner_path');
     }
 
+    public function updatePost(Request $request, ProfilePost $post): JsonResponse
+    {
+        abort_unless($post->user_id === $request->user()->id, 403);
+        $data = $request->validate(['body' => 'required|string|max:2000'], ['body.required' => 'Escreva o texto da publicação.', 'body.max' => 'O texto deve ter no máximo 2.000 caracteres.']);
+        $post->fill($data);
+        if ($post->isDirty('body')) {
+            $post->forceFill(['edited_at' => now()])->save();
+        }
+
+        return response()->json(['data' => $post]);
+    }
+
+    public function destroyPost(Request $request, ProfilePost $post): JsonResponse
+    {
+        abort_unless($post->user_id === $request->user()->id, 403);
+        $post->forceFill(['hidden_at' => now()])->save();
+
+        return response()->json(status: 204);
+    }
+
     public function storePost(Request $request): JsonResponse
     {
         $data = $request->validate(['body' => 'nullable|string|max:2000', 'pet_id' => 'nullable|integer|exists:pets,id', 'images' => 'nullable|array|max:5', 'images.*' => 'image|mimes:jpg,jpeg,png,webp|max:5120']);
@@ -76,7 +100,7 @@ class ProfileController extends Controller
             return response()->json(['message' => 'Escreva algo ou selecione uma foto para publicar.'], 422);
         }
         $paths = collect($request->file('images', []))
-            ->map(fn ($image) => $image->store('profiles/posts', 'public'))
+            ->map(fn ($image) => app(SafeImageStorage::class)->store($image, 'profiles/posts'))
             ->values();
         $post = $request->user()->profilePosts()->create(['body' => $data['body'] ?? null, 'pet_id' => $data['pet_id'] ?? null, 'image_path' => $paths->first(), 'gallery_paths' => $paths->slice(1)->all()]);
 
@@ -109,6 +133,9 @@ class ProfileController extends Controller
     private function saveFamilyPet(Request $request, Pet $pet, array $data, PetPhotoUpdater $photos): Pet
     {
         $ownerIds = $data['owner_ids'] ?? null;
+        foreach ($ownerIds ?? [] as $id) {
+            abort_if(UserBlock::between($request->user()->id, (int) $id), 403, 'Não é possível convidar uma conta bloqueada.');
+        }
         unset($data['owner_ids']);
 
         return DB::transaction(function () use ($request, $pet, $data, $photos, $ownerIds): Pet {
@@ -168,6 +195,7 @@ class ProfileController extends Controller
         abort_unless($pet->owner_id === $request->user()->id, 403);
         $data = $request->validate(['email' => 'required|email|exists:users,email']);
         $user = User::where('email', $data['email'])->firstOrFail();
+        abort_if(UserBlock::between($request->user()->id, $user->id), 403, 'Não é possível convidar uma conta bloqueada.');
         abort_if($user->id === $pet->owner_id, 422, 'Esta pessoa já é a criadora do pet.');
         if (! $pet->caretakers()->where('users.id', $user->id)->exists()) {
             $pet->caretakers()->attach($user->id, ['status' => 'pending']);
@@ -179,7 +207,7 @@ class ProfileController extends Controller
 
     public function updateOwnedPet(Request $request, Pet $pet, PetPhotoUpdater $photos): JsonResponse
     {
-        abort_unless($pet->ownership_kind === 'guardian' && Pet::ownedBy($request->user()->id)->whereKey($pet->id)->exists(), 403);
+        abort_unless(($pet->ownership_kind === 'guardian' || $pet->status === 'adopted') && Pet::ownedBy($request->user()->id)->whereKey($pet->id)->exists(), 403);
         $this->preparePetLocation($request);
         $data = $request->validate(['name' => 'required|string|max:80', 'species' => 'required|in:dog,cat', 'breed' => 'nullable|string|max:100', 'birth_date' => 'nullable|date|before:today', 'size' => 'required|in:small,medium,large', 'sex' => 'required|in:male,female', 'city' => 'required|string|max:100', 'state' => 'nullable|string|size:2', 'lives_with_owner' => 'sometimes|boolean', 'temperament' => 'required|string|max:150', 'description' => 'required|string|max:2000', 'photos' => 'nullable|array|max:10', 'photos.*' => 'image|max:5120', 'removed_photo_paths' => 'nullable|array|max:10', 'removed_photo_paths.*' => 'string|max:255', 'cover_photo_path' => 'nullable|string|max:255', 'cover_photo_index' => 'nullable|integer|min:0|max:9', 'owner_ids' => 'sometimes|array|max:20', 'owner_ids.*' => 'required|integer|distinct|exists:users,id']);
 
@@ -209,8 +237,12 @@ class ProfileController extends Controller
 
     public function destroyOwnedPet(Request $request, Pet $pet): JsonResponse
     {
-        abort_unless($pet->ownership_kind === 'guardian' && $pet->owner_id === $request->user()->id, 403);
-        $pet->delete();
+        abort_unless($pet->owner_id === $request->user()->id, 403);
+        DB::transaction(function () use ($pet): void {
+            $pet = Pet::lockForUpdate()->findOrFail($pet->id);
+            abort_if($pet->adoptions()->where('status', 'approved')->whereNull('released_at')->whereNotNull('pickup_at')->exists(), 409, 'Cancele a retirada agendada antes de excluir este pet.');
+            $pet->delete();
+        });
 
         return response()->json(status: 204);
     }
@@ -257,12 +289,13 @@ class ProfileController extends Controller
             })
             ->first();
         $posts = $user->profilePosts()
+            ->when($request->user()->hasRole('admin'), fn ($query) => $query->withoutGlobalScope('visible'))
             ->with(['pet:id,name,image_path', 'comments.user:id,name,avatar_path'])
             ->withCount('likes')
             ->withExists(['likes as is_liked' => fn ($query) => $query->where('user_id', $viewerId)])
             ->latest()
             ->paginate(3);
-        $adoptedPets = Pet::ownedBy($user->id)->with(['owner:id,name', 'caretakers' => fn ($query) => $query->select('users.id', 'users.name')])->get();
+        $adoptedPets = Pet::ownedBy($user->id)->where('status', 'adopted')->with(['owner:id,name', 'caretakers' => fn ($query) => $query->select('users.id', 'users.name')])->get();
 
         return response()->json([
             'profile' => $user->only(['id', 'name', 'city', 'state', 'avatar_url', 'banner_url', 'household_description']),
@@ -270,7 +303,7 @@ class ProfileController extends Controller
             'stats' => [
                 'pets' => $adoptedPets->count(),
                 'interests' => $user->adoptions()->count(),
-                'adoptions' => $user->adoptions()->where('status', 'approved')->count(),
+                'adoptions' => $user->adoptions()->whereNotNull('released_at')->count(),
                 'posts' => $user->profilePosts()->count(),
             ],
             'friendship_status' => $friendship
@@ -289,10 +322,7 @@ class ProfileController extends Controller
     {
         $request->validate([$field => 'required|image|mimes:jpg,jpeg,png,webp|max:5120']);
         $user = $request->user();
-        if ($user->{$attribute}) {
-            Storage::disk('public')->delete($user->{$attribute});
-        }
-        $path = $request->file($field)->store($folder, 'public');
+        $path = app(SafeImageStorage::class)->store($request->file($field), $folder);
         $user->update([$attribute => $path]);
         $post = $user->profilePosts()->create([
             'body' => $attribute === 'avatar_path' ? 'Atualizou a foto de perfil.' : 'Atualizou a imagem de capa.',
@@ -307,7 +337,9 @@ class ProfileController extends Controller
         $user = $request->user();
 
         if ($user->{$attribute}) {
-            Storage::disk('public')->delete($user->{$attribute});
+            if (! ProfilePost::withoutGlobalScopes()->where('image_path', $user->{$attribute})->exists()) {
+                Storage::disk('public')->delete($user->{$attribute});
+            }
             $user->update([$attribute => null]);
         }
 

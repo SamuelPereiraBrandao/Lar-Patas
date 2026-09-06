@@ -1,6 +1,34 @@
-﻿<script setup>
+<script setup>
+import ProfileSummaryLink from "./ProfileSummaryLink.vue";
 import { computed, ref, watch } from "vue";
 import { isLogged } from "../../../stores/ui";
+import { notify } from "../../../stores/ui";
+import { request } from "../../../stores/requests";
+const reporting = ref(false),
+    reportReason = ref(""),
+    sendingReport = ref(false),
+    reportedPost = ref(null);
+function openReport() {
+    reportedPost.value = currentPost.value;
+    reportReason.value = "";
+    reporting.value = true;
+}
+async function reportPost() {
+    sendingReport.value = true;
+    try {
+        await request(
+            `/api/profile/posts/${reportedPost.value.id}/reports`,
+            "POST",
+            { reason: reportReason.value },
+        );
+        reporting.value = false;
+        notify("Denúncia enviada para análise da equipe.");
+    } catch (error) {
+        notify(error.message, "error");
+    } finally {
+        sendingReport.value = false;
+    }
+}
 const props = defineProps({
     modelValue: Boolean,
     post: Object,
@@ -14,7 +42,12 @@ const draft = ref("");
 const postIndex = ref(0);
 const photoIndex = ref(0);
 const imagePosts = computed(() =>
-    props.posts.filter((item) => item.id === props.post?.id || item.image_url || item.gallery_urls?.length),
+    props.posts.filter(
+        (item) =>
+            item.id === props.post?.id ||
+            item.image_url ||
+            item.gallery_urls?.length,
+    ),
 );
 const currentPost = computed(
     () => imagePosts.value[postIndex.value] || props.post,
@@ -54,19 +87,22 @@ function avatarUrl(user) {
 }
 function previousPost() {
     postIndex.value =
-        (postIndex.value - 1 + imagePosts.value.length) % imagePosts.value.length;
+        (postIndex.value - 1 + imagePosts.value.length) %
+        imagePosts.value.length;
     photoIndex.value = 0;
     zoom.value = 1;
 }
 function nextPost() {
-    if (postIndex.value === imagePosts.value.length - 1) return emit("load-more");
+    if (postIndex.value === imagePosts.value.length - 1)
+        return emit("load-more");
     postIndex.value += 1;
     photoIndex.value = 0;
     zoom.value = 1;
 }
 function previousPhoto() {
     photoIndex.value =
-        (photoIndex.value - 1 + currentImages.value.length) % currentImages.value.length;
+        (photoIndex.value - 1 + currentImages.value.length) %
+        currentImages.value.length;
     zoom.value = 1;
 }
 function nextPhoto() {
@@ -75,12 +111,18 @@ function nextPhoto() {
 }
 async function toggleLike() {
     if (!isLogged.value || !currentPost.value?.id) return;
-    const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute("content") || "";
-    const response = await fetch(`/api/profile/posts/${currentPost.value.id}/likes`, {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { Accept: "application/json", "X-CSRF-TOKEN": csrf },
-    });
+    const csrf =
+        document
+            .querySelector('meta[name="csrf-token"]')
+            ?.getAttribute("content") || "";
+    const response = await fetch(
+        `/api/profile/posts/${currentPost.value.id}/likes`,
+        {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { Accept: "application/json", "X-CSRF-TOKEN": csrf },
+        },
+    );
     if (!response.ok) return;
     const data = await response.json();
     currentPost.value.is_liked = data.liked;
@@ -93,124 +135,204 @@ async function toggleLike() {
         max-width="1100"
         @update:model-value="emit('update:modelValue', $event)"
     >
-        <div class="viewer-shell"><v-btn v-if="imagePosts.length > 1" class="post-arrow post-previous" icon="mdi-chevron-left" @click="previousPost" /><v-card rounded="xl"
-            ><v-row no-gutters class="viewer-row">
-                <v-col v-if="currentImages.length" cols="12" md="7" class="image-pane"
-                    ><v-img
-                        v-if="currentPost"
-                        :src="currentImage"
-                        cover
-                        :style="{ transform: `scale(${zoom})` }"
-                    />
-                    <v-btn
-                        v-if="currentImages.length > 1"
-                        class="carousel-arrow photo-previous"
-                        icon="mdi-chevron-left"
-                        @click="previousPhoto"
-                    />
-                    <v-btn
-                        v-if="currentImages.length > 1"
-                        class="carousel-arrow photo-next"
-                        icon="mdi-chevron-right"
-                        @click="nextPhoto"
-                    />
-                    <div v-if="currentImages.length > 1" class="photo-counter">Foto {{ photoIndex + 1 }} de {{ currentImages.length }}</div>
-                    <div class="zoom-bar">
-                        <v-icon>mdi-magnify-minus</v-icon
-                        ><v-slider
-                            v-model="zoom"
-                            min="1"
-                            max="3"
-                            step=".1"
-                            hide-details
-                            class="mx-3"
-                        /><v-icon>mdi-magnify-plus</v-icon>
-                    </div></v-col
-                >
-                <v-col cols="12" :md="currentImages.length ? 5 : 12" class="comments-pane"
-                    ><div class="d-flex align-center ga-3 mb-4">
-                        <v-avatar size="40" color="primary"
-                            ><v-img
-                                v-if="currentAuthor?.avatar_url"
-                                :src="currentAuthor.avatar_url"
-                                cover
-                        /></v-avatar>
-                        <div>
-                            <b>{{ currentAuthor?.name }}</b>
-                            <div class="text-caption">
-                                {{ title || "Imagem do perfil" }}
-                            </div>
-                        </div>
-                        <v-spacer /><v-btn
-                            icon="mdi-close"
-                            variant="text"
-                            @click="emit('update:modelValue', false)"
+        <div class="viewer-shell">
+            <v-btn
+                v-if="imagePosts.length > 1"
+                class="post-arrow post-previous"
+                icon="mdi-chevron-left"
+                @click="previousPost"
+            /><v-card rounded="xl"
+                ><v-row no-gutters class="viewer-row">
+                    <v-col
+                        v-if="currentImages.length"
+                        cols="12"
+                        md="7"
+                        class="image-pane"
+                        ><v-img
+                            v-if="currentPost"
+                            :src="currentImage"
+                            cover
+                            :style="{ transform: `scale(${zoom})` }"
                         />
-                    </div>
-                    <p v-if="currentPost?.body" class="post-text">
-                        {{ currentPost.body }}
-                    </p>
-                    <v-btn v-if="isLogged" size="small" variant="tonal" :color="currentPost?.is_liked ? 'error' : 'primary'" :prepend-icon="currentPost?.is_liked ? 'mdi-heart' : 'mdi-heart-outline'" @click="toggleLike">{{ currentPost?.likes_count || 0 }} {{ currentPost?.likes_count === 1 ? 'curtida' : 'curtidas' }}</v-btn>
-                    <v-divider class="my-4" />
-                    <div class="comments-list">
-                        <p
-                            v-if="!currentPost?.comments?.length"
-                            class="text-medium-emphasis"
-                        >
-                            Ainda não há comentários nesta publicação.
-                        </p>
+                        <v-btn
+                            v-if="currentImages.length > 1"
+                            class="carousel-arrow photo-previous"
+                            icon="mdi-chevron-left"
+                            @click="previousPhoto"
+                        />
+                        <v-btn
+                            v-if="currentImages.length > 1"
+                            class="carousel-arrow photo-next"
+                            icon="mdi-chevron-right"
+                            @click="nextPhoto"
+                        />
                         <div
-                            v-for="item in currentPost?.comments || []"
-                            :key="item.id"
-                            class="comment"
+                            v-if="currentImages.length > 1"
+                            class="photo-counter"
                         >
-                            <v-avatar size="32" color="primary"
+                            Foto {{ photoIndex + 1 }} de
+                            {{ currentImages.length }}
+                        </div>
+                        <div class="zoom-bar">
+                            <v-icon>mdi-magnify-minus</v-icon
+                            ><v-slider
+                                v-model="zoom"
+                                min="1"
+                                max="3"
+                                step=".1"
+                                hide-details
+                                class="mx-3"
+                            /><v-icon>mdi-magnify-plus</v-icon>
+                        </div></v-col
+                    >
+                    <v-col
+                        cols="12"
+                        :md="currentImages.length ? 5 : 12"
+                        class="comments-pane"
+                        ><div class="d-flex align-center ga-3 mb-4">
+                            <v-avatar size="40" color="primary"
                                 ><v-img
-                                    v-if="avatarUrl(item.user)"
-                                    :src="avatarUrl(item.user)"
+                                    v-if="currentAuthor?.avatar_url"
+                                    :src="currentAuthor.avatar_url"
                                     cover
-                                /><span v-else>{{
-                                    item.user.name?.[0]
-                                }}</span></v-avatar
+                            /></v-avatar>
+                            <div>
+                                <ProfileSummaryLink
+                                    :user="currentAuthor"
+                                    @navigate="emit('update:modelValue', false)"
+                                />
+                                <v-btn
+                                    v-if="isLogged"
+                                    icon="mdi-flag-outline"
+                                    variant="text"
+                                    size="small"
+                                    aria-label="Denunciar publicação"
+                                    title="Denunciar publicação"
+                                    @click="openReport"
+                                />
+                                <div class="text-caption">
+                                    {{ title || "Imagem do perfil" }}
+                                </div>
+                            </div>
+                            <v-spacer /><v-btn
+                                icon="mdi-close"
+                                variant="text"
+                                @click="emit('update:modelValue', false)"
+                            />
+                        </div>
+                        <p v-if="currentPost?.body" class="post-text">
+                            {{ currentPost.body }}
+                        </p>
+                        <v-btn
+                            v-if="isLogged"
+                            size="small"
+                            variant="tonal"
+                            :color="currentPost?.is_liked ? 'error' : 'primary'"
+                            :prepend-icon="
+                                currentPost?.is_liked
+                                    ? 'mdi-heart'
+                                    : 'mdi-heart-outline'
+                            "
+                            @click="toggleLike"
+                            >{{ currentPost?.likes_count || 0 }}
+                            {{
+                                currentPost?.likes_count === 1
+                                    ? "curtida"
+                                    : "curtidas"
+                            }}</v-btn
+                        >
+                        <v-divider class="my-4" />
+                        <div class="comments-list">
+                            <p
+                                v-if="!currentPost?.comments?.length"
+                                class="text-medium-emphasis"
                             >
-                            <div class="comment-content">
-                                <b>{{ item.user.name }}</b
-                                ><small
-                                    >{{
-                                        new Date(
-                                            item.created_at,
-                                        ).toLocaleDateString("pt-BR")
-                                    }}
-                                    ·
-                                    {{
-                                        new Date(
-                                            item.created_at,
-                                        ).toLocaleTimeString("pt-BR", {
-                                            hour: "2-digit",
-                                            minute: "2-digit",
-                                        })
-                                    }}</small
-                                ><span>{{ item.body }}</span>
+                                Ainda não há comentários nesta publicação.
+                            </p>
+                            <div
+                                v-for="item in currentPost?.comments || []"
+                                :key="item.id"
+                                class="comment"
+                            >
+                                <v-avatar size="32" color="primary"
+                                    ><v-img
+                                        v-if="avatarUrl(item.user)"
+                                        :src="avatarUrl(item.user)"
+                                        cover
+                                    /><span v-else>{{
+                                        item.user.name?.[0]
+                                    }}</span></v-avatar
+                                >
+                                <div class="comment-content">
+                                    <ProfileSummaryLink
+                                        :user="item.user"
+                                        @navigate="
+                                            emit('update:modelValue', false)
+                                        "
+                                    /><small
+                                        >{{
+                                            new Date(
+                                                item.created_at,
+                                            ).toLocaleDateString("pt-BR")
+                                        }}
+                                        ·
+                                        {{
+                                            new Date(
+                                                item.created_at,
+                                            ).toLocaleTimeString("pt-BR", {
+                                                hour: "2-digit",
+                                                minute: "2-digit",
+                                            })
+                                        }}</small
+                                    ><span>{{ item.body }}</span>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                    <div class="compose">
-                        <v-textarea
-                            v-model="draft"
-                            hide-details
-                            rows="2"
-                            auto-grow
-                            variant="outlined"
-                            label="Escreva um comentário"
-                            @keydown.ctrl.enter.prevent="submit"
-                        /><v-btn
-                            icon="mdi-send"
-                            color="primary"
-                            @click="submit"
-                        /></div
-                ></v-col> </v-row
-        ></v-card><v-btn v-if="imagePosts.length > 1" class="post-arrow post-next" icon="mdi-chevron-right" @click="nextPost" /></div>
+                        <div class="compose">
+                            <v-textarea
+                                v-model="draft"
+                                hide-details
+                                rows="2"
+                                auto-grow
+                                variant="outlined"
+                                label="Escreva um comentário"
+                                @keydown.ctrl.enter.prevent="submit"
+                            /><v-btn
+                                icon="mdi-send"
+                                color="primary"
+                                @click="submit"
+                            /></div
+                    ></v-col> </v-row></v-card
+            ><v-btn
+                v-if="imagePosts.length > 1"
+                class="post-arrow post-next"
+                icon="mdi-chevron-right"
+                @click="nextPost"
+            />
+        </div>
     </v-dialog>
+    <v-dialog v-model="reporting" max-width="480" :persistent="sendingReport"
+        ><v-card title="Denunciar publicação"
+            ><v-card-text
+                ><p class="mb-4">
+                    Explique o problema para que a equipe possa analisar.
+                </p>
+                <v-textarea
+                    v-model="reportReason"
+                    label="Motivo (pelo menos 10 caracteres)"
+                    rows="4"
+                    maxlength="1000" /></v-card-text
+            ><v-card-actions
+                ><v-spacer /><v-btn @click="reporting = false">Cancelar</v-btn
+                ><v-btn
+                    color="primary"
+                    :loading="sendingReport"
+                    @click="reportPost"
+                    >Enviar denúncia</v-btn
+                ></v-card-actions
+            ></v-card
+        ></v-dialog
+    >
 </template>
 <style scoped>
 .image-pane {
@@ -259,7 +381,36 @@ async function toggleLike() {
 .photo-next {
     right: 28px;
 }
-.photo-counter { position: absolute; top: 28px; left: 50%; transform: translateX(-50%); z-index: 2; padding: 6px 11px; border-radius: 999px; color: rgb(var(--v-theme-on-primary)); background: rgba(0, 0, 0, .55); font-size: .75rem; font-weight: 700; }.viewer-shell { position: relative; }.post-arrow { position: absolute; top: 50%; z-index: 3; transform: translateY(-50%); background: rgb(var(--v-theme-surface)); box-shadow: 0 8px 22px rgba(0, 0, 0, .22); }.post-previous { left: -26px; }.post-next { right: -26px; }
+.photo-counter {
+    position: absolute;
+    top: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2;
+    padding: 6px 11px;
+    border-radius: 999px;
+    color: rgb(var(--v-theme-on-primary));
+    background: rgba(0, 0, 0, 0.55);
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+.viewer-shell {
+    position: relative;
+}
+.post-arrow {
+    position: absolute;
+    top: 50%;
+    z-index: 3;
+    transform: translateY(-50%);
+    background: rgb(var(--v-theme-surface));
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.22);
+}
+.post-previous {
+    left: -26px;
+}
+.post-next {
+    right: -26px;
+}
 .zoom-bar {
     position: absolute;
     left: 18px;
@@ -337,6 +488,11 @@ async function toggleLike() {
         height: auto;
         min-height: 380px;
     }
-    .post-previous { left: 8px; }.post-next { right: 8px; }
+    .post-previous {
+        left: 8px;
+    }
+    .post-next {
+        right: 8px;
+    }
 }
 </style>

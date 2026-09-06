@@ -19,6 +19,21 @@ import { clearSession } from "../stores/ui";
 const router = createRouter({
     history: createWebHistory(),
     routes: [
+        {
+            path: "/favoritos",
+            component: () => import("../views/account/FavoritesView.vue"),
+            meta: { requiresAuth: true },
+        },
+        {
+            path: "/privacidade",
+            component: () => import("../views/account/SafetyView.vue"),
+            meta: { requiresAuth: true },
+        },
+        {
+            path: "/admin/pendencias",
+            component: () => import("../views/admin/OperationsView.vue"),
+            meta: { requiresAuth: true },
+        },
         { path: "/", component: HomeView },
         { path: "/pets", component: PetsExploreView },
         { path: "/pets/:id", component: PetDetailsView, props: true },

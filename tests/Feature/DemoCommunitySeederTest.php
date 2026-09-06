@@ -34,7 +34,13 @@ class DemoCommunitySeederTest extends TestCase
         $this->assertDatabaseCount('users', 30);
         $this->assertDatabaseCount('pets', 48);
         $this->assertDatabaseCount('shelters', 7);
-        $this->assertDatabaseCount('adoptions', 108);
+        $this->assertDatabaseCount('adoptions', 118);
+        $belinha = Pet::where('name', 'Belinha')->sole();
+        $this->assertSame('available', $belinha->status);
+        $this->assertSame(13, $belinha->adoptions()->count());
+        $this->assertSame(13, $belinha->adoptions()->distinct()->count('user_id'));
+        $this->assertSame(12, $belinha->adoptions()->where('status', 'pending')->count());
+        $this->assertFalse($belinha->adoptions()->where('user_id', $belinha->owner_id)->exists());
         $this->assertDatabaseCount('profile_posts', 126);
         $this->assertDatabaseCount('profile_comments', 378);
         $this->assertDatabaseCount('profile_post_likes', 630);

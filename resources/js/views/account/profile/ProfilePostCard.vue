@@ -1,8 +1,33 @@
-﻿<script setup>
+<script setup>
 import { computed, reactive, ref } from "vue";
 import { userAvatar, userName } from "../../../stores/ui";
-const props = defineProps({ post: Object, author: Object });
-const emit = defineEmits(["comment", "view"]);
+import { notify } from "../../../stores/ui";
+import { request } from "../../../stores/requests";
+const props = defineProps({ post: Object, author: Object, editable: Boolean });
+const emit = defineEmits(["comment", "view", "changed"]);
+const editOpen = ref(false),
+    deleteOpen = ref(false),
+    savingPost = ref(false),
+    editedBody = ref("");
+async function changePost(remove = false) {
+    if (savingPost.value) return;
+    savingPost.value = true;
+    try {
+        await request(
+            `/api/profile/posts/${props.post.id}`,
+            remove ? "DELETE" : "PATCH",
+            remove ? undefined : { body: editedBody.value },
+        );
+        editOpen.value = false;
+        deleteOpen.value = false;
+        emit("changed");
+        notify(remove ? "Publicação excluída." : "Texto atualizado.");
+    } catch (error) {
+        notify(error.message, "error");
+    } finally {
+        savingPost.value = false;
+    }
+}
 const expanded = ref(false),
     draft = ref("");
 const summaries = reactive({});
@@ -10,6 +35,7 @@ const comments = computed(() =>
     expanded.value ? props.post.comments : props.post.comments.slice(0, 3),
 );
 function submit() {
+    if (props.post.hidden_at) return;
     if (!draft.value.trim()) return;
     emit("comment", props.post, draft.value);
     draft.value = "";
@@ -29,7 +55,11 @@ async function loadSummary(userId) {
     if (response.ok) summaries[userId] = await response.json();
 }
 async function toggleLike() {
-    const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute("content") || "";
+    if (props.post.hidden_at) return;
+    const csrf =
+        document
+            .querySelector('meta[name="csrf-token"]')
+            ?.getAttribute("content") || "";
     const response = await fetch(`/api/profile/posts/${props.post.id}/likes`, {
         method: "POST",
         credentials: "same-origin",
@@ -42,8 +72,11 @@ async function toggleLike() {
 }
 </script>
 <template>
-    <v-card rounded="xl" class="mb-5 post-card"
-        ><v-card-text class="pa-5"
+    <v-card
+        rounded="xl"
+        class="mb-5 post-card"
+        :class="{ 'post-frozen': post.hidden_at }"
+        ><v-card-text class="pa-5" :inert="Boolean(post.hidden_at)"
             ><div class="d-flex align-center ga-3 mb-4">
                 <v-avatar size="44" color="primary"
                     ><v-img
@@ -135,7 +168,48 @@ async function toggleLike() {
                         }}
                     </div>
                 </div>
+                <div
+                    v-if="editable && !post.hidden_at"
+                    class="ml-auto flex-shrink-0"
+                >
+                    <v-menu location="bottom end">
+                        <template #activator="{ props: menuProps }"
+                            ><v-btn
+                                v-bind="menuProps"
+                                icon="mdi-dots-horizontal"
+                                size="small"
+                                variant="text"
+                                aria-label="Opções da publicação"
+                        /></template>
+                        <v-list rounded="lg" density="compact">
+                            <v-list-item
+                                title="Editar texto"
+                                prepend-icon="mdi-pencil-outline"
+                                @click="
+                                    editedBody = post.body || '';
+                                    editOpen = true;
+                                "
+                            />
+                            <v-list-item
+                                title="Excluir publicação"
+                                prepend-icon="mdi-delete-outline"
+                                base-color="error"
+                                @click="deleteOpen = true"
+                            />
+                        </v-list>
+                    </v-menu>
+                </div>
             </div>
+            <v-alert
+                v-if="post.hidden_at"
+                variant="tonal"
+                color="warning"
+                icon="mdi-ghost-outline"
+                class="mb-4"
+                density="compact"
+                >Publicação excluída · Visível apenas para
+                administradores.</v-alert
+            >
             <p v-if="post.body" class="post-body">{{ post.body }}</p>
             <v-chip
                 v-if="post.pet"
@@ -150,15 +224,25 @@ async function toggleLike() {
                 height="340"
                 hide-delimiter-background
                 :show-arrows="post.gallery_urls.length > 1 ? 'hover' : false"
-            ><v-carousel-item v-for="image in post.gallery_urls" :key="image" :src="image" cover @click="emit('view', post)" /></v-carousel>
+                ><v-carousel-item
+                    v-for="image in post.gallery_urls"
+                    :key="image"
+                    :src="image"
+                    cover
+                    @click="!post.hidden_at && emit('view', post)"
+            /></v-carousel>
             <div class="post-actions mb-3">
                 <v-btn
                     size="small"
                     variant="text"
                     :color="post.is_liked ? 'error' : undefined"
-                    :prepend-icon="post.is_liked ? 'mdi-heart' : 'mdi-heart-outline'"
+                    :prepend-icon="
+                        post.is_liked ? 'mdi-heart' : 'mdi-heart-outline'
+                    "
                     @click="toggleLike"
-                    >{{ post.likes_count || 0 }} {{ post.likes_count === 1 ? "curtida" : "curtidas" }}</v-btn
+                    :disabled="Boolean(post.hidden_at)"
+                    >{{ post.likes_count || 0 }}
+                    {{ post.likes_count === 1 ? "curtida" : "curtidas" }}</v-btn
                 >
             </div>
             <div class="comments">
@@ -280,7 +364,7 @@ async function toggleLike() {
                         : `Ver mais ${post.comments.length - 3} comentários`
                 }}</v-btn
             >
-            <div class="comment-composer">
+            <div v-if="!post.hidden_at" class="comment-composer">
                 <v-avatar size="38" color="primary">
                     <v-img v-if="userAvatar" :src="userAvatar" cover />
                     <span v-else>{{ userName?.[0] || "A" }}</span>
@@ -299,8 +383,58 @@ async function toggleLike() {
                     @click="submit"
                 /></div></v-card-text
     ></v-card>
+    <v-dialog v-model="editOpen" max-width="560" :persistent="savingPost"
+        ><v-card title="Editar publicação"
+            ><v-card-text
+                ><v-textarea
+                    v-model="editedBody"
+                    label="Texto da publicação"
+                    maxlength="2000"
+                    counter
+                    auto-grow /></v-card-text
+            ><v-card-actions
+                ><v-spacer /><v-btn
+                    :disabled="savingPost"
+                    @click="editOpen = false"
+                    >Cancelar</v-btn
+                ><v-btn
+                    color="primary"
+                    variant="flat"
+                    :loading="savingPost"
+                    :disabled="!editedBody.trim()"
+                    @click="changePost()"
+                    >Salvar texto</v-btn
+                ></v-card-actions
+            ></v-card
+        ></v-dialog
+    >
+    <v-dialog v-model="deleteOpen" max-width="440" :persistent="savingPost"
+        ><v-card title="Excluir publicação?"
+            ><v-card-text
+                >A publicação ficará oculta para os usuários. Administradores
+                ainda poderão consultá-la.</v-card-text
+            ><v-card-actions
+                ><v-spacer /><v-btn
+                    :disabled="savingPost"
+                    @click="deleteOpen = false"
+                    >Cancelar</v-btn
+                ><v-btn
+                    color="error"
+                    variant="flat"
+                    :loading="savingPost"
+                    @click="changePost(true)"
+                    >Excluir publicação</v-btn
+                ></v-card-actions
+            ></v-card
+        ></v-dialog
+    >
 </template>
 <style scoped>
+.post-frozen {
+    filter: grayscale(1);
+    background: rgba(var(--v-theme-on-surface), 0.06);
+    opacity: 0.75;
+}
 .author {
     color: inherit;
     font-weight: 800;
@@ -329,8 +463,15 @@ async function toggleLike() {
 .post-body {
     white-space: pre-wrap;
 }
-.post-gallery { cursor: zoom-in; border-radius: 14px; overflow: hidden; }
-.post-actions { border-top: 1px solid rgba(var(--v-theme-on-surface), 0.08); padding-top: 8px; }
+.post-gallery {
+    cursor: zoom-in;
+    border-radius: 14px;
+    overflow: hidden;
+}
+.post-actions {
+    border-top: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+    padding-top: 8px;
+}
 .comments {
     display: grid;
     gap: 7px;

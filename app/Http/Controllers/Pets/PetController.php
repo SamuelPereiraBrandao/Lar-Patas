@@ -17,10 +17,12 @@ class PetController extends Controller
     public function index(Request $request): JsonResponse
     {
         $userId = $request->user('sanctum')?->id ?? $request->user()?->id;
+        abort_if($request->boolean('favorites') && ! $userId, 401, 'Entre na sua conta para ver seus favoritos.');
 
-        $pets = Pet::query()->where('ownership_kind', '!=', 'guardian')->with('shelter:id,name,district,city,state')->withCount('adoptions')->withMax('adoptions as latest_interest_at', 'created_at')->when($userId, fn ($query) => $query->withExists([
+        $pets = Pet::query()->where('ownership_kind', '!=', 'guardian')->when(! $request->boolean('favorites'), fn ($query) => $query->where('status', '!=', 'adopted'))->with('shelter:id,name,district,city,state')->withCount('adoptions')->withMax('adoptions as latest_interest_at', 'created_at')->when($userId, fn ($query) => $query->withExists([
+            'favorites as is_favorited' => fn ($favorites) => $favorites->where('user_id', $userId),
             'adoptions as is_interested' => fn ($adoptions) => $adoptions->where('user_id', $userId),
-        ]))->when($request->search, fn ($q, $s) => $q->where(fn ($q) => $q->where('name', 'like', "%{$s}%")->orWhere('city', 'like', "%{$s}%")))->when($request->species, fn ($q, $s) => $q->where('species', match (strtolower($s)) {
+        ]))->when($request->boolean('favorites'), fn ($query) => $query->whereHas('favorites', fn ($favorites) => $favorites->where('user_id', $userId)))->when($request->search, fn ($q, $s) => $q->where(fn ($q) => $q->where('name', 'like', "%{$s}%")->orWhere('city', 'like', "%{$s}%")))->when($request->species, fn ($q, $s) => $q->where('species', match (strtolower($s)) {
             'cachorro' => 'dog','gato' => 'cat',default => strtolower($s)
         }))->when($request->size, fn ($q, $s) => $q->where('size', match (strtolower($s)) {
             'pequeno' => 'small', 'médio', 'medio' => 'medium', 'grande' => 'large', default => strtolower($s),
@@ -40,7 +42,15 @@ class PetController extends Controller
             ]))
             ->findOrFail($pet->id);
         $pet->setAttribute('is_owner', $userId && $pet->owner_id === $userId);
+        $pet->setAttribute('can_adopt', $pet->status === 'available' && $pet->ownership_kind !== 'guardian' && (! $userId || ! Pet::ownedBy($userId)->whereKey($pet->id)->exists()));
+        $pet->setAttribute('is_favorited', $userId && $pet->favorites()->where('user_id', $userId)->exists());
+        $pet->setAttribute('can_view_health', $userId && (($request->user('sanctum') ?? $request->user())->hasRole('admin') || Pet::ownedBy($userId)->whereKey($pet->id)->exists() || $pet->adoptions()->where('user_id', $userId)->where('status', 'approved')->exists()));
         $pet->setAttribute('has_pending_owner_request', $userId && $pet->caretakers()->where('users.id', $userId)->wherePivot('status', 'pending')->exists());
+        if ($pet->status === 'adopted' || $pet->ownership_kind === 'guardian') {
+            $pet->setAttribute('is_interested', false);
+            $pet->offsetUnset('adoptions_count');
+            $pet->offsetUnset('latest_interest_at');
+        }
 
         return response()->json(['data' => $pet]);
     }
@@ -52,11 +62,14 @@ class PetController extends Controller
 
     public function store(StorePetRequest $request): JsonResponse
     {
+        abort_unless($request->user()->hasRole('admin'), 403);
+
         return response()->json(['data' => $this->save($request, new Pet)], 201);
     }
 
     public function update(StorePetRequest $request, Pet $pet): JsonResponse
     {
+        abort_unless($request->user()->hasRole('admin'), 403);
         abort_if($pet->ownership_kind === 'guardian' && ! Pet::ownedBy($request->user()->id)->whereKey($pet->id)->exists(), 403);
 
         return response()->json(['data' => $this->save($request, $pet)]);
@@ -64,6 +77,7 @@ class PetController extends Controller
 
     public function destroy(Request $request, Pet $pet): JsonResponse
     {
+        abort_unless($request->user()->hasRole('admin'), 403);
         abort_if($pet->ownership_kind === 'guardian' && $pet->owner_id !== $request->user()->id, 403);
         $pet->delete();
 

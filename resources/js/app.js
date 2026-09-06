@@ -8,6 +8,29 @@ import "vuetify/styles";
 import App from "./App.vue";
 import router from "./router";
 const vuetify = createVuetify({
+    defaults: {
+        VTextField: {
+            variant: "outlined",
+            color: "primary",
+            density: "comfortable",
+        },
+        VTextarea: {
+            variant: "outlined",
+            color: "primary",
+            density: "comfortable",
+        },
+        VSelect: {
+            variant: "outlined",
+            color: "primary",
+            density: "comfortable",
+        },
+        VAutocomplete: {
+            variant: "outlined",
+            color: "primary",
+            density: "comfortable",
+        },
+        VBtn: { rounded: "lg" },
+    },
     components,
     directives,
     icons: { defaultSet: "mdi", sets: { mdi } },

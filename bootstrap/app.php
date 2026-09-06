@@ -1,5 +1,8 @@
 <?php
 
+use App\Http\Middleware\AuditAdministrativeChanges;
+use App\Http\Middleware\EnsureActiveAccount;
+use App\Http\Middleware\EnsureCommunityAccess;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -14,6 +17,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->statefulApi();
+        $middleware->alias(['community-access' => EnsureCommunityAccess::class, 'active' => EnsureActiveAccount::class, 'audit' => AuditAdministrativeChanges::class]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

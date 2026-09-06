@@ -3,6 +3,7 @@
 namespace App\Http;
 
 use App\Models\Pet;
+use App\Models\ProfilePost;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
@@ -37,10 +38,10 @@ class PetPhotoUpdater
         if ($coverIndex !== null && ! array_key_exists((int) $coverIndex, $uploads)) {
             throw ValidationException::withMessages(['cover_photo_index' => 'Escolha uma das novas fotos para a capa.']);
         }
-        $newPaths = collect($uploads)->map(fn ($photo) => $photo->store('pets/gallery', 'public'));
+        $newPaths = collect($uploads)->map(fn ($photo) => app(SafeImageStorage::class)->store($photo, 'pets/gallery'));
         $paths = $remaining->concat($newPaths)->values();
         if ($image) {
-            $cover = $image->store('pets', 'public');
+            $cover = app(SafeImageStorage::class)->store($image, 'pets');
             $paths = $paths->reject(fn ($path) => $path === $pet->image_path)->prepend($cover)->values();
         }
         if ($coverIndex !== null) {
@@ -53,7 +54,11 @@ class PetPhotoUpdater
         $data['gallery_paths'] = $paths->slice(1)->values()->all();
         unset($data['image'], $data['photos'], $data['removed_photo_paths'], $data['cover_photo_path'], $data['cover_photo_index']);
         $pet->fill($data)->save();
-        Storage::disk('public')->delete($removed->all());
+        foreach ($removed as $path) {
+            if (! ProfilePost::withoutGlobalScopes()->where('image_path', $path)->orWhereJsonContains('gallery_paths', $path)->exists()) {
+                Storage::disk('public')->delete($path);
+            }
+        }
 
         return $pet;
     }

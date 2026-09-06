@@ -79,7 +79,11 @@ onMounted(hydrateUser);
             </div>
         </div>
         <div class="pa-4">
-            <v-card to="/perfil" class="profile-card pa-3" rounded="xl" elevation="0"
+            <v-card
+                to="/perfil"
+                class="profile-card pa-3"
+                rounded="xl"
+                elevation="0"
                 ><div class="d-flex align-center ga-3">
                     <v-avatar color="primary" size="44"
                         ><v-img
@@ -117,6 +121,11 @@ onMounted(hydrateUser);
                 title="Explorar pets"
                 rounded="lg"
             /><v-list-item
+                to="/pets"
+                prepend-icon="mdi-paw"
+                title="Adoção"
+                rounded="lg"
+            /><v-list-item
                 to="/painel"
                 prepend-icon="mdi-heart-multiple-outline"
                 title="Meus interesses"
@@ -128,10 +137,29 @@ onMounted(hydrateUser);
                 rounded="lg"
             />
             <v-list-item
-                    to="/meus-pets"
-                    prepend-icon="mdi-paw-outline"
-                    title="Meus pets"
-                    rounded="lg"
+                to="/meus-pets"
+                prepend-icon="mdi-paw-outline"
+                title="Meus pets"
+                rounded="lg"
+            />
+            <v-list-item
+                to="/favoritos"
+                prepend-icon="mdi-bookmark-outline"
+                title="Favoritos e buscas"
+                rounded="lg"
+            />
+            <v-list-item
+                to="/privacidade"
+                prepend-icon="mdi-shield-account-outline"
+                title="Privacidade"
+                rounded="lg"
+            />
+            <v-list-item
+                v-if="isAdmin"
+                to="/admin/pendencias"
+                prepend-icon="mdi-clipboard-check-outline"
+                title="Pendências da equipe"
+                rounded="lg"
             />
             <template v-if="isAdmin"
                 ><v-divider class="my-3" /><v-list-subheader

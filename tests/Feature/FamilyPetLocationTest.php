@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Pet;
+use App\Models\Role;
 use App\Models\Shelter;
 use App\Models\State;
 use App\Models\User;
@@ -15,6 +16,14 @@ class FamilyPetLocationTest extends TestCase
 {
     use RefreshDatabase;
 
+    private function admin(): User
+    {
+        $user = User::factory()->create();
+        $user->roles()->attach(Role::firstOrCreate(['name' => 'admin'], ['label' => 'Admin']));
+
+        return $user;
+    }
+
     public function test_administrative_pet_uses_shelter_location_and_can_move_elsewhere(): void
     {
         $state = State::create(['name' => 'Santa Catarina', 'code' => 'SC']);
@@ -23,7 +32,7 @@ class FamilyPetLocationTest extends TestCase
         $pet = Pet::factory()->create();
         $details = $pet->only(['name', 'species', 'size', 'sex', 'temperament', 'description', 'status']);
 
-        $this->actingAs(User::factory()->create(), 'sanctum')->putJson('/api/pets/'.$pet->id, [...$details, 'shelter_id' => $shelter->id, 'city' => 'Blumenau', 'state' => 'SC'])
+        $this->actingAs($this->admin(), 'sanctum')->putJson('/api/pets/'.$pet->id, [...$details, 'shelter_id' => $shelter->id, 'city' => 'Blumenau', 'state' => 'SC'])
             ->assertOk()->assertJsonPath('data.city', 'Joinville')->assertJsonPath('data.state', 'SC');
         $this->assertDatabaseHas('pets', ['id' => $pet->id, 'shelter_id' => $shelter->id, 'city' => 'Joinville', 'state' => 'SC']);
 
@@ -39,7 +48,7 @@ class FamilyPetLocationTest extends TestCase
         $pet = Pet::factory()->create(['city' => 'Blumenau', 'state' => 'SC']);
         $details = $pet->only(['name', 'species', 'size', 'sex', 'temperament', 'description', 'status']);
 
-        $this->actingAs(User::factory()->create(), 'sanctum')->putJson('/api/pets/'.$pet->id, [...$details, 'city' => 'Curitiba', 'state' => 'SC'])
+        $this->actingAs($this->admin(), 'sanctum')->putJson('/api/pets/'.$pet->id, [...$details, 'city' => 'Curitiba', 'state' => 'SC'])
             ->assertUnprocessable()->assertJsonPath('errors.city.0', 'Escolha uma cidade da UF selecionada.');
         $this->assertDatabaseHas('pets', ['id' => $pet->id, 'city' => 'Blumenau', 'state' => 'SC']);
     }
@@ -50,7 +59,7 @@ class FamilyPetLocationTest extends TestCase
         $pet = Pet::factory()->create();
         $details = $pet->only(['name', 'species', 'size', 'sex', 'temperament', 'description', 'status']);
 
-        $this->actingAs(User::factory()->create(), 'sanctum')->putJson('/api/pets/'.$pet->id, [...$details, 'shelter_id' => $shelter->id])
+        $this->actingAs($this->admin(), 'sanctum')->putJson('/api/pets/'.$pet->id, [...$details, 'shelter_id' => $shelter->id])
             ->assertOk()->assertJsonPath('data.city', 'Joinville')->assertJsonPath('data.state', 'SC');
         $this->assertDatabaseHas('pets', ['id' => $pet->id, 'shelter_id' => $shelter->id, 'city' => 'Joinville', 'state' => 'SC']);
     }

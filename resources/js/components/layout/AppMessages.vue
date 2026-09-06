@@ -38,6 +38,10 @@ const router = useRouter();
 let unreadRefreshTimer;
 let realtime;
 const refreshUnreadMessages = () => loadUnreadMessages();
+async function refreshRelationship() {
+    await loadContacts();
+    if (chatTarget.value) await selectContact(chatTarget.value);
+}
 const csrf =
     document
         .querySelector('meta[name="csrf-token"]')
@@ -327,7 +331,10 @@ async function retryMessage(message) {
         message._status = "failed";
         message._error = error.message;
         return;
-        notify("Mensagem ainda nÃ£o enviada. Tente novamente em alguns segundos.", "error");
+        notify(
+            "Mensagem ainda nÃ£o enviada. Tente novamente em alguns segundos.",
+            "error",
+        );
     } finally {
         sending.value = false;
         await nextTick();
@@ -350,7 +357,10 @@ async function toggleLike(message) {
     if (!response.ok) {
         const data = await response.json().catch(() => ({}));
         likingMessageIds.value.delete(message.id);
-        return notify(data.message || "NÃ£o foi possÃ­vel atualizar a curtida.", "error");
+        return notify(
+            data.message || "NÃ£o foi possÃ­vel atualizar a curtida.",
+            "error",
+        );
     }
     const data = await response.json();
     message.is_liked = data.liked;
@@ -418,12 +428,14 @@ watch(drawer, (value) => {
     if (!value) chatTarget.value = null;
 });
 onMounted(() => {
+    window.addEventListener("friendship:changed", refreshRelationship);
     loadContacts();
     loadUnreadMessages();
     unreadRefreshTimer = window.setInterval(loadUnreadMessages, 10000);
     window.addEventListener("notifications:received", refreshUnreadMessages);
 });
 onBeforeUnmount(() => {
+    window.removeEventListener("friendship:changed", refreshRelationship);
     realtime?.close();
     window.clearInterval(unreadRefreshTimer);
     window.removeEventListener("notifications:received", refreshUnreadMessages);
@@ -610,11 +622,13 @@ onBeforeUnmount(() => {
                                 </div>
                                 <div class="message-meta">
                                     <small v-if="message._status === 'sending'"
-                                        >Enviando...</small>
+                                        >Enviando...</small
+                                    >
                                     <small
                                         v-else-if="message._status === 'failed'"
                                         class="message-failed"
-                                        >NÃ£o enviada</small>
+                                        >NÃ£o enviada</small
+                                    >
                                     <v-tooltip
                                         v-if="message._status === 'failed'"
                                         location="top"
@@ -662,7 +676,11 @@ onBeforeUnmount(() => {
                                                 : 'mdi-check'
                                         "
                                         size="14"
-                                        :color="message.read_at ? 'primary' : undefined"
+                                        :color="
+                                            message.read_at
+                                                ? 'primary'
+                                                : undefined
+                                        "
                                     />
                                     <v-btn
                                         class="reaction-button"
@@ -704,7 +722,25 @@ onBeforeUnmount(() => {
                         Envie a primeira mensagem.
                     </div>
                 </div>
-                <div class="chat-composer pa-3">
+                <v-alert
+                    v-if="conversation && !conversation.can_message"
+                    variant="tonal"
+                    color="primary"
+                    icon="mdi-lock-outline"
+                    class="ma-3"
+                    rounded="lg"
+                >
+                    Para continuar conversando, desbloqueie o usuário ou
+                    adicione a amizade novamente.
+                    <v-btn
+                        :to="`/perfil/${chatTarget.id}`"
+                        variant="text"
+                        size="small"
+                        class="mt-2"
+                        >Ver perfil</v-btn
+                    >
+                </v-alert>
+                <div v-else class="chat-composer pa-3">
                     <v-text-field
                         ref="composer"
                         v-model="draft"
@@ -851,6 +887,9 @@ onBeforeUnmount(() => {
     order: -1;
     margin-right: auto;
     margin-left: -2px;
+}
+.direct-message.liked .reaction-button {
+    margin-right: 0;
 }
 .reaction-button {
     opacity: 0;

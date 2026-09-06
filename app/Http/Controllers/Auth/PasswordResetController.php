@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
@@ -19,11 +20,7 @@ class PasswordResetController extends Controller
 
         $status = Password::sendResetLink($request->only('email'));
 
-        if ($status !== Password::RESET_LINK_SENT) {
-            return response()->json(['message' => 'Não foi possível enviar o link agora. Tente novamente em instantes.'], 422);
-        }
-
-        return response()->json(['message' => 'Enviamos um link seguro para redefinir sua senha. Verifique seu e-mail.']);
+        return response()->json(['message' => 'Se este e-mail estiver cadastrado, você receberá um link para redefinir a senha.']);
     }
 
     public function reset(Request $request): JsonResponse
@@ -38,7 +35,13 @@ class PasswordResetController extends Controller
             $user->forceFill([
                 'password' => Hash::make($password),
                 'remember_token' => Str::random(60),
+                'two_factor_code' => null,
+                'two_factor_expires_at' => null,
             ])->save();
+            $user->tokens()->delete();
+            if (config('session.driver') === 'database') {
+                DB::table('sessions')->where('user_id', $user->id)->delete();
+            }
         });
 
         if ($status !== Password::PASSWORD_RESET) {

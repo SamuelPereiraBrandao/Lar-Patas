@@ -68,6 +68,7 @@ onMounted(async () => {
                 </div>
             </v-card>
             <v-btn
+                v-if="pet.can_adopt"
                 :loading="loading"
                 color="primary"
                 size="large"
@@ -76,6 +77,12 @@ onMounted(async () => {
                 @click="interest"
                 >Marcar como pet de interesse <v-icon end icon="mdi-heart"
             /></v-btn>
+            <v-alert v-else type="info" variant="tonal" class="mt-6"
+                >Este pet não está disponível para você registrar interesse.
+                <router-link :to="`/pets/${pet.id}`"
+                    >Voltar ao pet</router-link
+                ></v-alert
+            >
         </v-card>
     </v-container>
 </template>

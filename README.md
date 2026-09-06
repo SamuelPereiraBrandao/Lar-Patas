@@ -1,5 +1,3 @@
-Sim, entendi. Ficaria mais nesse formato: objetivo, direto e sem documentar cada detalhe interno.
-
 ````markdown
 # Lar & Patas
 

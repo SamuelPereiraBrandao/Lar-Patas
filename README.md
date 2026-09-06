@@ -252,6 +252,42 @@ As demais contas de demonstração também utilizam a senha:
 ```text
 password
 ```
+## Postman
+
+A documentação customizada da API está disponível no Postman:
+
+[Lar & Patas API — documentação Postman](https://documenter.getpostman.com/view/32790910/2sBYAxNoWP)
+
+A documentação contém requisições organizadas por fluxo da aplicação:
+
+- autenticação;
+- pets;
+- favoritos;
+- saúde dos pets;
+- adoções;
+- perfil;
+- comunidade;
+- chat e mensagens;
+- notificações;
+- amizades;
+- dashboards;
+- administração.
+
+Para testar localmente:
+
+1. Inicie o Redis.
+2. Execute o Laravel com `php artisan serve`.
+3. Execute o frontend com `npm run dev`.
+4. Execute o Horizon com `php artisan horizon`.
+5. Configure a URL base como `http://localhost:8000`.
+6. Execute primeiro o fluxo de autenticação.
+7. Depois execute as requisições protegidas.
+
+Usuário de demonstração:
+
+```text
+E-mail: admin@larepatas.test
+Senha: password
 
 ## Testes
 

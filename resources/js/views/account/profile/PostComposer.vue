@@ -34,6 +34,11 @@ function selectImage(event) {
     const selected = Array.from(event.target.files || []);
     const available = 5 - images.value.length;
     if (!selected.length || available < 1) return;
+    if (selected.some((file) => file.size > 3 * 1024 * 1024)) {
+        notify("Cada imagem deve ter no máximo 3 MB.", "error");
+        event.target.value = "";
+        return;
+    }
     if (selected.length > available)
         notify(
             `Você pode adicionar até 5 fotos. Foram adicionadas ${available}.`,

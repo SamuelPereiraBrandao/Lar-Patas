@@ -1,4 +1,4 @@
-﻿<script setup>
+<script setup>
 import { computed, ref } from "vue";
 const props = defineProps({
     profile: Object,
@@ -26,8 +26,8 @@ function pick(event, type) {
     if (!file) return;
     if (!["image/jpeg", "image/png", "image/webp"].includes(file.type))
         return emit("notice", "Use somente JPG, PNG ou WebP.");
-    if (file.size > 5 * 1024 * 1024)
-        return emit("notice", "A imagem deve ter no máximo 5 MB.");
+    if (file.size > 3 * 1024 * 1024)
+        return emit("notice", "A imagem deve ter no máximo 3 MB.");
     const url = URL.createObjectURL(file);
     if (type === "banner") {
         bannerPreview.value = url;

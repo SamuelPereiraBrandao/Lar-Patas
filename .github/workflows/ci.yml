@@ -1,0 +1,58 @@
+name: Testes e build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_DATABASE: pet_adoption
+          MYSQL_ROOT_PASSWORD: testing
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -ptesting"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, dom, fileinfo, pdo_mysql, pdo_sqlite
+          coverage: none
+          tools: composer:v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Instalar backend
+        run: composer install --no-interaction --prefer-dist --no-progress
+      - name: Preparar ambiente de demonstração
+        run: |
+          cp .env.example .env
+          php artisan key:generate --no-interaction
+      - name: Validar instalação MySQL e seeders
+        env:
+          DB_PASSWORD: testing
+          MAIL_MAILER: log
+        run: |
+          php artisan migrate --seed --no-interaction
+          php artisan storage:link --no-interaction
+      - name: Instalar frontend e gerar build
+        run: |
+          npm ci
+          npm run build
+      - name: Executar testes
+        run: php artisan test --compact

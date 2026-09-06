@@ -69,9 +69,9 @@ class FamilyPetOwnersTest extends TestCase
     public function test_pending_associations_are_not_counted_and_duplicates_are_not_counted_twice(): void
     {
         $owner = User::factory()->create();
-        $pet = Pet::factory()->create(['owner_id' => $owner->id]);
+        $pet = Pet::factory()->create(['owner_id' => $owner->id, 'status' => 'adopted']);
         $pet->caretakers()->attach($owner->id, ['status' => 'accepted']);
-        $pending = Pet::factory()->create();
+        $pending = Pet::factory()->create(['status' => 'adopted']);
         $pending->caretakers()->attach($owner->id, ['status' => 'pending']);
         $this->actingAs($owner, 'sanctum')->getJson('/api/profile/social')->assertOk()->assertJsonPath('stats.pets', 1)->assertJsonCount(1, 'my_pets');
     }

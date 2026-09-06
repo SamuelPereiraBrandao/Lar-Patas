@@ -230,11 +230,11 @@ function add(event) {
             (file) =>
                 !["image/jpeg", "image/png", "image/webp"].includes(
                     file.type,
-                ) || file.size > 5 * 1024 * 1024,
+                ) || file.size > 3 * 1024 * 1024,
         )
     )
         return notify(
-            "Escolha fotos JPG, PNG ou WebP de at\u00e9 5 MB.",
+            "Escolha fotos JPG, PNG ou WebP de at\u00e9 3 MB.",
             "error",
         );
     const available = Math.max(0, 10 - gallery.value.length);
@@ -578,7 +578,7 @@ async function save() {
                             </div>
                             <p class="text-caption text-medium-emphasis">
                                 A primeira foto será a capa. Escolha até 10
-                                fotos de até 5 MB cada.
+                                fotos de até 3 MB cada.
                             </p></v-card
                         >
                         <v-row v-else dense

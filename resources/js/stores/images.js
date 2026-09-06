@@ -1,4 +1,6 @@
 export async function preparePhoto(file, maxSide = 1600) {
+    if (file.size > 3 * 1024 * 1024)
+        throw new Error("A imagem deve ter no máximo 3 MB.");
     if (!["image/jpeg", "image/png", "image/webp"].includes(file.type))
         throw new Error("Escolha uma foto JPG, PNG ou WebP.");
     const bitmap = await createImageBitmap(file);

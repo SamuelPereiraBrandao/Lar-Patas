@@ -95,7 +95,7 @@ class ProfileController extends Controller
 
     public function storePost(Request $request): JsonResponse
     {
-        $data = $request->validate(['body' => 'nullable|string|max:2000', 'pet_id' => 'nullable|integer|exists:pets,id', 'images' => 'nullable|array|max:5', 'images.*' => 'image|mimes:jpg,jpeg,png,webp|max:5120']);
+        $data = $request->validate(['body' => 'nullable|string|max:2000', 'pet_id' => 'nullable|integer|exists:pets,id', 'images' => 'nullable|array|max:5', 'images.*' => 'image|mimes:jpg,jpeg,png,webp|max:3072']);
         if (blank($data['body'] ?? null) && ! $request->hasFile('images')) {
             return response()->json(['message' => 'Escreva algo ou selecione uma foto para publicar.'], 422);
         }
@@ -120,7 +120,7 @@ class ProfileController extends Controller
             'name' => 'required|string|max:80', 'species' => 'required|in:dog,cat', 'breed' => 'nullable|string|max:100',
             'birth_date' => 'nullable|date|before:today', 'size' => 'required|in:small,medium,large', 'sex' => 'required|in:male,female',
             'city' => 'required|string|max:100', 'state' => 'nullable|string|size:2', 'lives_with_owner' => 'sometimes|boolean', 'temperament' => 'required|string|max:150', 'description' => 'required|string|max:2000',
-            'photos' => 'nullable|array|max:10', 'photos.*' => 'image|max:5120', 'removed_photo_paths' => 'nullable|array|max:10', 'removed_photo_paths.*' => 'string|max:255', 'cover_photo_path' => 'nullable|string|max:255', 'cover_photo_index' => 'nullable|integer|min:0|max:9', 'owner_ids' => 'sometimes|array|max:20', 'owner_ids.*' => 'required|integer|distinct|exists:users,id',
+            'photos' => 'nullable|array|max:10', 'photos.*' => 'image|max:3072', 'removed_photo_paths' => 'nullable|array|max:10', 'removed_photo_paths.*' => 'string|max:255', 'cover_photo_path' => 'nullable|string|max:255', 'cover_photo_index' => 'nullable|integer|min:0|max:9', 'owner_ids' => 'sometimes|array|max:20', 'owner_ids.*' => 'required|integer|distinct|exists:users,id',
         ]);
         $data['owner_id'] = $request->user()->id;
         $data['ownership_kind'] = 'guardian';
@@ -209,7 +209,7 @@ class ProfileController extends Controller
     {
         abort_unless(($pet->ownership_kind === 'guardian' || $pet->status === 'adopted') && Pet::ownedBy($request->user()->id)->whereKey($pet->id)->exists(), 403);
         $this->preparePetLocation($request);
-        $data = $request->validate(['name' => 'required|string|max:80', 'species' => 'required|in:dog,cat', 'breed' => 'nullable|string|max:100', 'birth_date' => 'nullable|date|before:today', 'size' => 'required|in:small,medium,large', 'sex' => 'required|in:male,female', 'city' => 'required|string|max:100', 'state' => 'nullable|string|size:2', 'lives_with_owner' => 'sometimes|boolean', 'temperament' => 'required|string|max:150', 'description' => 'required|string|max:2000', 'photos' => 'nullable|array|max:10', 'photos.*' => 'image|max:5120', 'removed_photo_paths' => 'nullable|array|max:10', 'removed_photo_paths.*' => 'string|max:255', 'cover_photo_path' => 'nullable|string|max:255', 'cover_photo_index' => 'nullable|integer|min:0|max:9', 'owner_ids' => 'sometimes|array|max:20', 'owner_ids.*' => 'required|integer|distinct|exists:users,id']);
+        $data = $request->validate(['name' => 'required|string|max:80', 'species' => 'required|in:dog,cat', 'breed' => 'nullable|string|max:100', 'birth_date' => 'nullable|date|before:today', 'size' => 'required|in:small,medium,large', 'sex' => 'required|in:male,female', 'city' => 'required|string|max:100', 'state' => 'nullable|string|size:2', 'lives_with_owner' => 'sometimes|boolean', 'temperament' => 'required|string|max:150', 'description' => 'required|string|max:2000', 'photos' => 'nullable|array|max:10', 'photos.*' => 'image|max:3072', 'removed_photo_paths' => 'nullable|array|max:10', 'removed_photo_paths.*' => 'string|max:255', 'cover_photo_path' => 'nullable|string|max:255', 'cover_photo_index' => 'nullable|integer|min:0|max:9', 'owner_ids' => 'sometimes|array|max:20', 'owner_ids.*' => 'required|integer|distinct|exists:users,id']);
 
         return response()->json(['data' => $this->saveFamilyPet($request, $pet, $data, $photos)]);
     }
@@ -320,7 +320,7 @@ class ProfileController extends Controller
 
     private function uploadProfileImage(Request $request, string $field, string $folder, string $attribute): JsonResponse
     {
-        $request->validate([$field => 'required|image|mimes:jpg,jpeg,png,webp|max:5120']);
+        $request->validate([$field => 'required|image|mimes:jpg,jpeg,png,webp|max:3072']);
         $user = $request->user();
         $path = app(SafeImageStorage::class)->store($request->file($field), $folder);
         $user->update([$attribute => $path]);
